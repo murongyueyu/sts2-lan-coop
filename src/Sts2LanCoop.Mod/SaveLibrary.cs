@@ -70,7 +70,8 @@ internal static class SaveLibrary
     public static void Select(RunEntry entry)
     {
         CheckIdleWrites();
-        if(entry.ModEnvironment.Length>0 && entry.ModEnvironment!=ModSyncInventory.LastEnvironment)
+        if(entry.ModEnvironment.Length>0 && entry.ModEnvironment!=ModSyncInventory.LastEnvironment &&
+            !(entry.ModProfile.Count>0 && ModSyncInventory.EnvironmentHash(entry.ModProfile)==ModSyncInventory.LastEnvironment))
             throw new InvalidOperationException("存档模组环境与本次加载不同（或尚在检查）。请恢复该存档的模组版本后重试。");
         ImportWorking();
         if (entry.Owner != LanSession.Settings.PlayerId) throw new InvalidOperationException("此存档属于另一主机身份，不能更换主机角色。");

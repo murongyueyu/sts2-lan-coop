@@ -10,6 +10,7 @@
     <Compile Include="../../tests/RuntimeSmoke/RuntimeSavesTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeSavesTest.cs" />
     <Compile Include="../../tests/RuntimeSmoke/RuntimeReloadTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeReloadTest.cs" />
     <Compile Include="../../tests/RuntimeSmoke/RuntimeModSyncTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeModSyncTest.cs" />
+    <Compile Include="../../tests/RuntimeSmoke/RuntimeUnlocksTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeUnlocksTest.cs" />
     <Compile Include="../Sts2LanCoop.Core/*.cs" Link="Core/%(Filename)%(Extension)" />
     <Reference Include="sts2"><HintPath>$(GameDataDir)/sts2.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="GodotSharp"><HintPath>$(GameDataDir)/GodotSharp.dll</HintPath><Private>false</Private></Reference>

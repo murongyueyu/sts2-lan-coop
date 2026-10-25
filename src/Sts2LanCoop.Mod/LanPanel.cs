@@ -96,6 +96,7 @@ internal sealed class LanPanel
         foreach (var recent in settings.RecentConnections)
             Button($"最近连接：{recent}", () => { if (!_busy) _address.Text = recent; });
         _status = Text("Radmin：填写房主虚拟 IP；樱花：填写节点域名和外部 UDP 端口。", 20);
+        Button("共用原版 / 模组解锁（进行中的对局分开）",()=>{if(!_busy)SharedUnlocks.Configure(_menu,text=>{if(!_disposed)_status.Text=text;});});
         _reloadKey = Input("快速SL快捷键（例如Ctrl+F8；off关闭；换角色需保存退出后重新入房）", settings.QuickReloadHotkey);
         Button("保存联机和快捷键设置", () => { if (!_busy) { try { ApplySettings(); _status.Text = "设置已保存。"; } catch (Exception ex) { _status.Text = ex.Message; } } });
         _close = Button("关闭", CloseOrCancel);

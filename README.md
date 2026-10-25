@@ -3,11 +3,11 @@
 面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
 
 ![license](https://img.shields.io/badge/license-GPL--3.0-blue)
-![version](https://img.shields.io/badge/version-0.4.0--alpha.1-orange)
+![version](https://img.shields.io/badge/version-0.5.0--alpha.1-orange)
 ![game](https://img.shields.io/badge/game-v0.107.1-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-> English: a LAN / direct-IP co-op mod for *Slay the Spire 2* (v0.107.1), adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, and host mod synchronization with exact-version packages. GPL-3.0.
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2* (v0.107.1), adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, host mod synchronization with exact-version packages, and optional shared unlock progress. GPL-3.0.
 
 ## 安装（下载即用）
 
@@ -42,6 +42,7 @@
 | 朋友退坑后存档就废了 | 客机可**接替**离线朋友的角色，或彼此**互换**；进度完整保留，不需要原朋友在线 |
 | 打崩了要全员重开房间 | 「快速 SL · 全员重载」：暂停菜单一键或 `Ctrl+F8`，**保留连接和当前角色**回到最近保存点 |
 | 各人装的模组版本不一样，进不去房间 | **主机模组同步**：比对主机与客机的模组清单，按主机版本直传同端口版本包，退出后由助手事务式安装并可回滚 |
+| 玩模组版时原版解锁进度不生效 | **共用解锁**（可选、默认关闭）：加载模组进度时合并原版解锁，保存时导出新增解锁；对局、战绩与成就记录仍然各自独立 |
 | 不知道队友是谁 | 昵称随会话同步，显示当前实际操作者 |
 | 改 Mod 就绕开校验 | 保留原版版本、玩法 Mod 与模型哈希检查，不静默忽略差异 |
 
@@ -57,6 +58,7 @@
 
 - 已在本机以真实引擎 + 四个独立游戏进程验证到首个 MapRoom，并覆盖满员拒绝、端口占用、取消、准备同步、存档与快速 SL。
 - 主机模组同步已实现同端口版本包传输、完整文件校验、进度/取消/断点缓存、退出后事务式应用与恢复；**Windows 专用**，手机端未适配。
+- 共用解锁默认关闭，只作用于当前账号同编号存档栏，关闭开关**不会撤销**已合并的进度；开启前请确保已备份。
 - **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透、手机接入和完整一局的跨设备验收仍未完成。
 - 手机目标环境为 Sts2MobileLauncher（启动器 v0.1.4 / 游戏 v0.107.1），手机端加载与跨网络接入尚未验证。
 - 快速 SL 的效果参照手动保存退出再继续：未持久化的操作可以重做，但不保证所有选项重置，也不保证随机结果改变。

@@ -16,7 +16,7 @@ public static class Plugin
         {
             harmony.PatchAll(typeof(Plugin).Assembly);
             ((SceneTree)Engine.GetMainLoop()).ProcessFrame += QuickReload.Tick;
-            GD.Print("[STS2 LAN Co-op] 0.4.0-alpha.1 loaded; admission protocol 3, mod sync protocol 1, game v0.107.1.");
+            GD.Print("[STS2 LAN Co-op] 0.5.0-alpha.1 loaded; optional shared unlocks, admission protocol 3, mod sync protocol 1, game v0.107.1.");
         }
         catch
         {

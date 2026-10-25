@@ -61,10 +61,10 @@ internal static class ModSyncInventory
         }
         return inventory;
     }
-    public static string EnvironmentHash(IEnumerable<SyncMod> mods)
+    public static string EnvironmentHash(IEnumerable<SyncMod> mods,bool includeCore=false)
     {
         var profile=new SyncProfile{Mods=mods.Where(m=>m.Loaded).ToList()};var required=ModSyncRules.Required(profile);
-        return ModSyncRules.Digest(JsonSerializer.SerializeToUtf8Bytes(profile.Mods.Where(m=>required.Contains(m.Id))
+        return ModSyncRules.Digest(JsonSerializer.SerializeToUtf8Bytes(profile.Mods.Where(m=>required.Contains(m.Id)&&(includeCore||m.Id!=ModSyncRules.CoreId))
             .OrderBy(m=>m.Id,StringComparer.Ordinal).Select(m=>new{m.Id,m.Version,m.Fingerprint})));
     }
     public static async Task<SyncProfile> HostProfile()
@@ -88,6 +88,6 @@ internal static class ModSyncInventory
             }
             catch(Exception ex){published.Add(mod with{Unavailable=ex.Message});}
         }
-        return profile with {Mods=published,Revision=EnvironmentHash(mods)};
+        return profile with {Mods=published,Revision=EnvironmentHash(mods,true)};
     }
 }
