@@ -32,6 +32,7 @@ internal static class AdmissionTransport
     {
         Session = Guid.NewGuid().ToString("N"); ClaimToken = null; Names = [];
         _reservations = new(); Pending.Clear(); People.Clear(); _lastBroadcast = 0;
+        ModSyncTransport.Reset();
     }
     public static void SetNames(Dictionary<string, string> names)
     {
@@ -130,6 +131,12 @@ internal static class AdmissionTransport
             if (data.type != ENetConnection.EventType.Receive) continue;
             try
             {
+                if (ModSyncTransport.IsControl(data.packetData))
+                {
+                    if (!Pending.ContainsKey(data.peer)) throw new InvalidDataException("同步只能通过独立连接进行。");
+                    Pending[data.peer] = Time.GetTicksMsec();
+                    ModSyncTransport.Serve(data.peer, data.packetData); continue;
+                }
                 if (AdmissionWire.IsControl(data.packetData))
                 {
                     AdmissionMessage response;

@@ -79,6 +79,7 @@ internal static class LanSession
             var error = host.StartENetHost(Settings.HostPort, LanSettings.MaximumPlayers);
             if (error.HasValue) throw new InvalidOperationException($"建房失败：{error.Value}。请检查 UDP 端口是否被占用。");
             HostedService = host;
+            ModSyncTransport.Warm();
             host.Disconnected += _ => { if (_generation == generation) End(); };
             if (run == null)
             {

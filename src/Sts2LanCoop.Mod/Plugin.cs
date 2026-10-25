@@ -16,7 +16,7 @@ public static class Plugin
         {
             harmony.PatchAll(typeof(Plugin).Assembly);
             ((SceneTree)Engine.GetMainLoop()).ProcessFrame += QuickReload.Tick;
-            GD.Print("[STS2 LAN Co-op] 0.3.0-alpha.1 loaded; admission protocol 3 and synchronized quick reload, game v0.107.1.");
+            GD.Print("[STS2 LAN Co-op] 0.4.0-alpha.1 loaded; admission protocol 3, mod sync protocol 1, game v0.107.1.");
         }
         catch
         {
@@ -31,6 +31,7 @@ internal static class MultiplayerMenuPatch
 {
     private static void Postfix(NMultiplayerSubmenu __instance)
     {
+        ModSyncInventory.CaptureStartup();
         if (__instance.HasNode("LanCoopEntry")) return;
         var button = new Button { Name = "LanCoopEntry", Text = "局域网 / 直连 · 4人", ZIndex = 20 };
         __instance.AddChild(button);

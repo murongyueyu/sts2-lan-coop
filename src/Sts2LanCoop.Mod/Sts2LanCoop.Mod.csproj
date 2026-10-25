@@ -9,10 +9,12 @@
     <Compile Include="../../tests/RuntimeSmoke/RuntimeTestDriver.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeTestDriver.cs" />
     <Compile Include="../../tests/RuntimeSmoke/RuntimeSavesTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeSavesTest.cs" />
     <Compile Include="../../tests/RuntimeSmoke/RuntimeReloadTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeReloadTest.cs" />
+    <Compile Include="../../tests/RuntimeSmoke/RuntimeModSyncTest.cs" Condition="'$(RuntimeSmokeTest)' == 'true'" Link="RuntimeModSyncTest.cs" />
     <Compile Include="../Sts2LanCoop.Core/*.cs" Link="Core/%(Filename)%(Extension)" />
     <Reference Include="sts2"><HintPath>$(GameDataDir)/sts2.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="GodotSharp"><HintPath>$(GameDataDir)/GodotSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(GameDataDir)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Steamworks.NET"><HintPath>$(GameDataDir)/Steamworks.NET.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <Target Name="CheckGameReferences" BeforeTargets="ResolveReferences">
     <Error Condition="!Exists('$(GameDataDir)/sts2.dll')" Text="找不到游戏引用。请通过 -p:GameDir=游戏目录 或 Game.local.props 配置 v0.107.1 安装位置。" />

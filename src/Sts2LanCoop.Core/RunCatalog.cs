@@ -27,6 +27,8 @@ public sealed record RunEntry
     public string Revision { get; init; } = "";
     public string PayloadHash { get; init; } = "";
     public string GameVersion { get; init; } = "v0.107.1";
+    public string ModEnvironment { get; init; } = "";
+    public List<SyncMod> ModProfile { get; init; } = [];
     public int PlayerCount { get; init; }
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public ulong Owner { get; init; }

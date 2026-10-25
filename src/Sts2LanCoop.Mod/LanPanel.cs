@@ -19,6 +19,7 @@ internal sealed class LanPanel
     private readonly LineEdit _address;
     private readonly LineEdit _runName;
     private readonly LineEdit _reloadKey;
+    private readonly CheckButton _shareMods;
     private readonly VBoxContainer _saves;
     private readonly VBoxContainer _slots;
     private AdmissionMessage? _inspected;
@@ -75,6 +76,8 @@ internal sealed class LanPanel
         Text("v0.107.1 · 新建或继续多人冒险 · 继续时人数固定，主机角色固定", 20);
         _name = Input("当前昵称（所有玩家可见，跟随本次加入的人）", settings.PlayerName);
         _port = Input("房主 UDP 监听端口", settings.HostPort.ToString());
+        _shareMods = new CheckButton {Text="允许向加入者分享本房间所需模组（请确认有权分享；不含游戏、存档和账号）",ButtonPressed=settings.ShareMods};
+        _body.AddChild(_shareMods);
         _runName = Input("新对局名称", $"多人冒险 {DateTime.Now:MM-dd HH:mm}");
         _host = Button("创建四人房间", Host);
         Text("继续多人对局", 26);
@@ -85,6 +88,8 @@ internal sealed class LanPanel
         _address = Input("房主 IP / 域名:端口", settings.RecentConnections.FirstOrDefault() ?? "");
         _address.PlaceholderText = "例如 room.example.com:45678";
         Button("查看房间 / 刷新可选角色", () => _ = Inspect());
+        Button("检查 / 同步主机模组", () => _ = SyncMods());
+        Button("恢复最近一次同步前的模组配置", () => _ = RestoreMods());
         _slots = new VBoxContainer(); _body.AddChild(_slots);
         _join = Button("连接", () => _ = Join());
         _address.TextSubmitted += text => { if (!_busy) _ = Join(); };
@@ -102,6 +107,7 @@ internal sealed class LanPanel
         }
         _layer.TreeExiting += () => { _disposed = true; _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); };
         RefreshSaves();
+        ModSyncWorkflow.ShowPending(_menu, value => _address.Text=value, value => {if(!_disposed)_status.Text=value;});
     }
 
     private Label Text(string text, int size = 24)
@@ -139,6 +145,7 @@ internal sealed class LanPanel
             throw new InvalidDataException("昵称应为 1–24 个字符，不能包含控制字符。");
         LanSession.Settings.PlayerName = name;
         LanSession.Settings.HostPort = port;
+        LanSession.Settings.ShareMods = _shareMods.ButtonPressed;
         _ = ReloadShortcut.Parse(_reloadKey.Text);
         LanSession.Settings.QuickReloadHotkey = _reloadKey.Text.Trim();
         LanSession.Save();
@@ -166,11 +173,12 @@ internal sealed class LanPanel
             if (!Endpoint.TryParse(_address.Text, out var endpoint, out var error))
             { _status.Text = error; return; }
             SetBusy(true);
+            _requestCancel = new();
+            if (!await ModSyncWorkflow.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token)) return;
             _status.Text = "正在连接并检查兼容性……";
             if (_inspectedEndpoint != endpoint) { _inspected = null; _chosenSlot = null; }
             if (_inspected == null)
             {
-                _requestCancel = new();
                 _inspected = await AdmissionTransport.Request(_menu.GetTree(), endpoint!, new(), _requestCancel.Token);
                 _inspectedEndpoint = endpoint;
             }
@@ -195,6 +203,7 @@ internal sealed class LanPanel
         finally
         {
             _flow = null;
+            _requestCancel?.Dispose(); _requestCancel=null;
             if (!_disposed) SetBusy(false);
         }
     }
@@ -202,10 +211,11 @@ internal sealed class LanPanel
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        _host.Disabled = _join.Disabled = busy;
+        _host.Disabled = _join.Disabled = busy || LanSession.GetBlockReason()!=null;
         _name.Editable = _port.Editable = _address.Editable = !busy;
         _runName.Editable = !busy;
         _reloadKey.Editable = !busy;
+        _shareMods.Disabled = busy;
         _close.Text = busy ? "取消连接" : "关闭";
     }
 
@@ -213,6 +223,28 @@ internal sealed class LanPanel
     {
         if (_busy) { _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); }
         else _layer.QueueFree();
+    }
+
+    private async Task SyncMods()
+    {
+        if(_busy)return;
+        try
+        {
+            ApplySettings();
+            if(!Endpoint.TryParse(_address.Text,out var endpoint,out var error))throw new InvalidDataException(error);
+            SetBusy(true);_requestCancel=new();
+            await ModSyncWorkflow.Check(_menu,endpoint!,text=>{if(!_disposed)_status.Text=text;},_requestCancel.Token);
+        }
+        catch(OperationCanceledException){if(!_disposed)_status.Text="同步已取消，下载缓存保留。";}
+        catch(Exception ex){if(!_disposed)_status.Text=ex.Message;GD.PushWarning(ex.ToString());}
+        finally{_requestCancel?.Dispose();_requestCancel=null;if(!_disposed)SetBusy(false);}
+    }
+    private async Task RestoreMods()
+    {
+        if(_busy)return;
+        try{SetBusy(true);_requestCancel=new();await ModSyncWorkflow.RestoreLatest(_menu,_requestCancel.Token);}
+        catch(Exception ex){if(!_disposed)_status.Text=ex.Message;}
+        finally{_requestCancel?.Dispose();_requestCancel=null;if(!_disposed)SetBusy(false);}
     }
 
     private void RefreshSaves()
@@ -227,7 +259,7 @@ internal sealed class LanPanel
             foreach (var entry in entries)
             {
                 var row = new VBoxContainer(); _saves.AddChild(row);
-                row.AddChild(new Label { Text = $"{entry.Name} · {entry.PlayerCount}人 · 第{entry.Act}幕/{entry.Floor}层 · {entry.SavedAt.ToLocalTime():MM-dd HH:mm}" });
+                row.AddChild(new Label { Text = $"{entry.Name} · {entry.PlayerCount}人 · 第{entry.Act}幕/{entry.Floor}层 · {entry.SavedAt.ToLocalTime():MM-dd HH:mm} · {(entry.ModEnvironment.Length==0?"历史模组环境未记录":"已记录模组环境")}" });
                 var rename = new LineEdit { Text = entry.Name, MaxLength = 40 }; row.AddChild(rename);
                 var actions = new HBoxContainer(); row.AddChild(actions);
                 var resume = new Button { Text = "继续此对局", CustomMinimumSize = new Vector2(200, 48) }; actions.AddChild(resume);

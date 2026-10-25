@@ -70,6 +70,8 @@ internal static class SaveLibrary
     public static void Select(RunEntry entry)
     {
         CheckIdleWrites();
+        if(entry.ModEnvironment.Length>0 && entry.ModEnvironment!=ModSyncInventory.LastEnvironment)
+            throw new InvalidOperationException("存档模组环境与本次加载不同（或尚在检查）。请恢复该存档的模组版本后重试。");
         ImportWorking();
         if (entry.Owner != LanSession.Settings.PlayerId) throw new InvalidOperationException("此存档属于另一主机身份，不能更换主机角色。");
         var run = Decode(Catalog.ReadPayload(entry));
@@ -143,7 +145,7 @@ internal static class SaveLibrary
         var reread = Decode(bytes);
         if (reread.StartTime != written.StartTime || !reread.Players.Select(p => p.NetId).Order().SequenceEqual(written.Players.Select(p => p.NetId).Order()))
             throw new InvalidDataException("原版写入读回与当前对局不一致，未提交存档库。");
-        var summary = Summarize(reread);
+        var summary = Summarize(reread) with {ModEnvironment=ModSyncInventory.LastEnvironment,ModProfile=ModSyncInventory.LastProfile};
         if (_reloadPin != null) { _reloadWrite = (summary, bytes); return; }
         var current = ActiveEntry;
         ActiveEntry = Catalog.Commit(summary with

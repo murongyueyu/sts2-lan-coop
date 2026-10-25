@@ -16,6 +16,7 @@ public sealed class LanSettings
     public ushort HostPort { get; set; } = Endpoint.DefaultPort;
     public string ExternalEndpoint { get; set; } = "";
     public string QuickReloadHotkey { get; set; } = "Ctrl+F8";
+    public bool ShareMods { get; set; }
     public List<string> RecentConnections { get; set; } = [];
 
     public static ulong CreateId()
