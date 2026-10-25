@@ -1,0 +1,102 @@
+# STS2 LAN Co-op
+
+面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
+
+![license](https://img.shields.io/badge/license-GPL--3.0-blue)
+![version](https://img.shields.io/badge/version-0.3.0--alpha.1-orange)
+![game](https://img.shields.io/badge/game-v0.107.1-green)
+![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2* (v0.107.1), adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, and synchronized quick-save-reload. GPL-3.0.
+
+## 安装（下载即用）
+
+1. **退出游戏**，备份整个游戏用户存档目录。建议先使用独立测试配置。
+2. 从本页 [Releases](https://github.com/murongyueyu/sts2-lan-coop/releases) 下载，或点右上角绿色 `Code` → `Download ZIP`。
+3. 解压后，把 `sts2_lan_coop` **整个文件夹**放进游戏的 `mods` 目录：
+   ```
+   你的游戏目录/mods/sts2_lan_coop/
+   ├── sts2_lan_coop.dll
+   ├── sts2_lan_coop.json
+   └── README.md
+   ```
+4. **禁用外部 QuickSL**（本版已内置快速 SL，两套同时开会冲突），然后**完整重启**游戏。
+5. 进入多人菜单，点右上角「局域网 / 直连 · 4 人」。
+
+> ⚠️ 所有参与者必须使用**同一个** Mod 版本（准入协议 3）。0.2 及更早版本、手机内置 LAN 无法加入本版房间。
+
+建房、续局、换人和快速 SL 的完整操作说明见 [sts2_lan_coop/README.md](sts2_lan_coop/README.md)。
+
+## 用途
+
+《杀戮尖塔 2》的多人模式依赖 Steam 网络。当朋友不在同一个 Steam 环境、想直接走局域网、或者需要跨网络联机时，原版没有可用的连接入口。
+
+本项目补上这个入口：在游戏内提供「局域网 / 直连 · 4 人」面板，复用原版 ENet/UDP 的建房与加入流程，让 2–4 名玩家在同一个可达地址上开一局合作。
+
+| 问题 | 本项目提供的做法 |
+| --- | --- |
+| 原版只有 Steam 联机 | IPv4 / 域名直连，可配置 UDP 监听端口、复制网卡与樱花外部地址、记住最近成功连接 |
+| 一局结束就得重开 | 每局独立命名存档 + 「继续多人对局」列表，可重命名后接着打 |
+| 朋友退坑后存档就废了 | 客机可**接替**离线朋友的角色，或彼此**互换**；进度完整保留，不需要原朋友在线 |
+| 打崩了要全员重开房间 | 「快速 SL · 全员重载」：暂停菜单一键或 `Ctrl+F8`，**保留连接和当前角色**回到最近保存点 |
+| 不知道队友是谁 | 昵称随会话同步，显示当前实际操作者 |
+| 改 Mod 就绕开校验 | 保留原版版本、玩法 Mod 与模型哈希检查，不静默忽略差异 |
+
+## 截图
+
+![四人大厅](images/四人大厅.png)
+
+![连接面板](images/连接面板.png)
+
+## 当前状态
+
+**alpha 开发版，尚未完成跨设备与手机验收。**
+
+- 已在本机以真实引擎 + 四个独立游戏进程验证到首个 MapRoom，并覆盖满员拒绝、端口占用、取消、准备同步、存档与快速 SL。
+- **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透、手机接入和完整一局的跨设备验收仍未完成。
+- 手机目标环境为 Sts2MobileLauncher（启动器 v0.1.4 / 游戏 v0.107.1），手机端加载与跨网络接入尚未验证。
+- 快速 SL 的效果参照手动保存退出再继续：未持久化的操作可以重做，但不保证所有选项重置，也不保证随机结果改变。
+
+暂不支持：游戏中途加入、人数变化、房主迁移、密码房、自动搜房、自动重连、跨版本互通、独立服务器。
+
+## 组网方式
+
+游戏资料与 Mod 资料共用一个 UDP 端口（默认 `33771`），不需要另开端口。
+
+- **实体局域网**：填写房主可达的局域网 IP。
+- **Radmin**：加入同一虚拟网络，填写房主 Radmin IP 和监听端口。
+- **樱花**：房主建 UDP 隧道并映射游戏监听端口；客机填节点域名和外部 UDP 端口。面板可保存/复制外部地址，但不会自动创建隧道。
+
+## 从源码构建
+
+需要 .NET 9 SDK，以及**合法拥有**的 v0.107.1 游戏安装目录。
+
+```powershell
+dotnet build src/Sts2LanCoop.Mod/Sts2LanCoop.Mod.csproj -c Release -p:GameDir="C:\你的游戏目录"
+```
+
+产物为 `src/Sts2LanCoop.Mod/bin/Release/net9.0/sts2_lan_coop.dll`，与 [sts2_lan_coop.json](sts2_lan_coop/sts2_lan_coop.json) 放进同一个 `sts2_lan_coop` 文件夹即可使用。
+
+也可以在项目根目录放一个 `Game.local.props` 配置 `GameDir`（该文件已被 `.gitignore` 忽略）。构建不会自动安装到游戏，也不改防火墙。
+
+## 目录结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `sts2_lan_coop/` | **可直接使用的 Mod 包**（DLL + 清单 + 说明） |
+| `src/Sts2LanCoop.Core` | 与游戏无关的基础逻辑：端点、配置、网卡、存档目录、控制消息编码 |
+| `src/Sts2LanCoop.Mod` | 游戏 Mod 工程：原版 ENet 与大厅接入、选角、保存归档、快速 SL、中文 UI |
+| `images/` | 截图 |
+
+## 许可证
+
+本项目以 [GNU General Public License v3.0](LICENSE) 发布。你可以自由使用、修改和分发，但基于本项目的衍生作品必须同样以 GPL-3.0 开源。
+
+## 免责声明
+
+本项目是《杀戮尖塔 2》的第三方粉丝 Mod，与 Mega Crit 及游戏发行方无任何隶属或授权关系。
+
+- 不包含、不分发游戏本体、美术资源、音频、破解文件或授权验证绕过手段。
+- 《杀戮尖塔 2》及相关商标、版权归其各自权利人所有。
+- 编译源码需要你合法拥有的游戏安装副本；构建过程只引用其中的 DLL，不会复制或再分发。
+- 使用本 Mod 导致的存档损坏、进度丢失或账号风险由使用者自行承担。**请务必备份存档。**

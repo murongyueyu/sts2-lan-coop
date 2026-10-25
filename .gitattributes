@@ -1,0 +1,10 @@
+# 二进制资源，避免 Git 对其做文本转换
+*.png binary
+*.jpg binary
+*.zip binary
+*.dll binary
+*.pdb binary
+*.exe binary
+
+# PowerShell 脚本统一 CRLF
+*.ps1 text eol=crlf

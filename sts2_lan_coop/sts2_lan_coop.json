@@ -1,0 +1,11 @@
+{
+  "id": "sts2_lan_coop",
+  "name": "STS2 LAN Co-op",
+  "author": "STS2 LAN Co-op contributors",
+  "version": "0.3.0-alpha.1",
+  "description": "LAN co-op with named saves, fixed-count continuation and synchronized quick reload. Quick reload preserves current roles and nicknames. All peers need this version; mobile unverified.",
+  "has_dll": true,
+  "has_pck": false,
+  "affects_gameplay": false,
+  "min_game_version": "0.107.1"
+}
