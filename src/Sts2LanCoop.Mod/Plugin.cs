@@ -15,8 +15,11 @@ public static class Plugin
         try
         {
             harmony.PatchAll(typeof(Plugin).Assembly);
+            ((SceneTree)Engine.GetMainLoop()).Root.CallDeferred(Node.MethodName.AddChild, new LanMobileLifecycle { Name = "LanMobileLifecycle" });
             ((SceneTree)Engine.GetMainLoop()).ProcessFrame += QuickReload.Tick;
-            GD.Print("[STS2 LAN Co-op] 0.6.0-alpha.1 loaded; one DLL supports v0.107.1 / v0.111.0; admission 3, mod sync 1.");
+            // 平台日志供期0真机核查OS.GetName()/OS.GetVersion()的实际返回值。
+            GD.Print($"[STS2 LAN Co-op] 0.7.0-alpha.6 loaded on {LanCapability.Platform} {OS.GetVersion()}; one DLL supports v0.107.1 / v0.111.0; admission 5, SL 2, mod sync 2.");
+            GD.Print($"[STS2 LAN Co-op] capabilities: join={Allowed(LanCapability.JoinBlockReason)}, host={Allowed(LanCapability.HostBlockReason)}, SL={Allowed(LanCapability.QuickReloadBlockReason)}, mod packages={LanCapability.CanInspectMods}, auto apply={Allowed(LanCapability.ModSyncBlockReason)}.");
         }
         catch
         {
@@ -24,6 +27,7 @@ public static class Plugin
             throw;
         }
     }
+    private static string Allowed(string? blockReason) => blockReason == null ? "allowed" : "blocked: " + blockReason;
 }
 
 [HarmonyPatch(typeof(NMultiplayerSubmenu), nameof(NMultiplayerSubmenu._Ready))]

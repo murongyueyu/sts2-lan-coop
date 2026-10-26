@@ -8,8 +8,10 @@ namespace Sts2LanCoop.Mod;
 
 internal static class ModSyncInventory
 {
-    public static string Storage => Path.Combine(GameRoot,".sts2-lan-modsync");
-    public static string GameRoot => Path.GetDirectoryName(System.Environment.ProcessPath)!;
+    public static string Storage => LanCapability.Android
+        ? Godot.ProjectSettings.GlobalizePath("user://sts2_lan_coop/modsync") : Path.Combine(GameRoot,".sts2-lan-modsync");
+    public static string GameRoot => LanCapability.Windows ? Path.GetDirectoryName(System.Environment.ProcessPath)!
+        : throw new InvalidOperationException("Android同步使用独立缓存，不使用PC游戏目录或PowerShell应用器。");
     public static string Cache => Path.Combine(Storage,"cache");
     private static readonly Dictionary<string,string> Startup = new(StringComparer.OrdinalIgnoreCase);
     private static Task<List<SyncMod>>? _startup;

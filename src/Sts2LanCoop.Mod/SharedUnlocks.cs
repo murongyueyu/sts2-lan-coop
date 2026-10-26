@@ -47,7 +47,7 @@ internal static class SharedUnlocks
         _loading++;
         try
         {
-            if(!LanSession.Settings.ShareUnlockProgress||!UserDataPathProvider.IsRunningModded||!ReferenceEquals(manager,Manager))return;
+            if(!LanSession.Settings.ShareUnlockProgress||!UserDataPathProvider.IsRunningModded||!ReferenceEquals(manager,Manager)||LanCapability.SharedUnlockBlockReason!=null)return;
             var store=Store(manager);var file=Full(store,Current);
             if(File.Exists(file))Backup(store,Current,File.ReadAllBytes(file));
         }
@@ -65,7 +65,7 @@ internal static class SharedUnlocks
         if(_busy)return;
         try
         {
-            if(!LanSession.Settings.ShareUnlockProgress||!UserDataPathProvider.IsRunningModded||!ReferenceEquals(manager,Manager))return;
+            if(!LanSession.Settings.ShareUnlockProgress||!UserDataPathProvider.IsRunningModded||!ReferenceEquals(manager,Manager)||LanCapability.SharedUnlockBlockReason!=null)return;
             Sync(manager,import);
         }
         catch(Exception ex){Failure(ex);}
@@ -74,12 +74,14 @@ internal static class SharedUnlocks
     {Status="解锁同步未完成："+ex.Message;GD.PushError("[STS2 LAN Co-op] "+Status);}
     public static void SyncNow()
     {
+        if(LanCapability.SharedUnlockBlockReason is {} blocked)throw new InvalidOperationException(blocked);
         if(LanSession.Active||RunManager.Instance.IsInProgress||SaveManager.Instance.CurrentRunSaveTask is {IsCompleted:false})
             throw new InvalidOperationException("请先保存退出对局并离开房间，再合并解锁进度。");
         Sync(Manager,true);
     }
     public static void Configure(Node parent,Action<string> report)
     {
+        if(LanCapability.SharedUnlockBlockReason is {} blocked){report(blocked);return;}
         var enabled=LanSession.Settings.ShareUnlockProgress;
         var dialog=new ConfirmationDialog
         {

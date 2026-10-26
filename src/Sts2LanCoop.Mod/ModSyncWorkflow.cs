@@ -13,8 +13,9 @@ internal static class ModSyncWorkflow
     private static bool _pendingShown;
     public static async Task<bool> Check(Node parent,Endpoint endpoint,Action<string> progress,CancellationToken cancel)
     {
-        if(OS.GetName()!="Windows"||RunManager.Instance.IsInProgress||LanSession.Active)
-            throw new InvalidOperationException("请先退出当前对局/房间，在Windows多人菜单同步。");
+        if(LanCapability.ModSyncBlockReason is {} blocked)throw new InvalidOperationException(blocked);
+        if(RunManager.Instance.IsInProgress||LanSession.Active)
+            throw new InvalidOperationException("请先退出当前对局/房间，在多人菜单同步。");
         progress("正在读取主机模组与本机文件……");
         using var client=new ModSyncTransport.Client(parent.GetTree(),endpoint);
         var profile=await client.Profile(cancel);
@@ -132,7 +133,7 @@ internal static class ModSyncWorkflow
     }
     public static void ShowPending(Node parent,Action<string> address,Action<string> status)
     {
-        if(_pendingShown)return;
+        if(_pendingShown||LanCapability.ModSyncBlockReason!=null)return;
         var file=Path.Combine(ModSyncInventory.Storage,"pending.json");
         if(!File.Exists(file))
         {
@@ -164,6 +165,7 @@ internal static class ModSyncWorkflow
     }
     public static async Task RestoreLatest(Node parent,CancellationToken cancel)
     {
+        if(LanCapability.ModSyncBlockReason is {} blocked)throw new InvalidOperationException(blocked);
         var root=Path.Combine(ModSyncInventory.Storage,"transactions");
         var entry=Directory.Exists(root)?Directory.EnumerateDirectories(root).Where(d=>
         {
@@ -186,17 +188,17 @@ internal static class ModSyncWorkflow
         dialog.GetNode<VBoxContainer>("Details").AddChild(sources);dialog.GetOkButton().Text="确认调整并获取";dialog.GetCancelButton().Text="取消";
         return await Dialog(parent,dialog,()=>sources.GetSelectedId(),cancel);
     }
-    private static async Task<bool> Confirm(Node parent,string title,string text,CancellationToken cancel)
+    internal static async Task<bool> Confirm(Node parent,string title,string text,CancellationToken cancel,string okText="确认")
     {
         var dialog=Details(title,text);
-        dialog.GetOkButton().Text="确认";dialog.GetCancelButton().Text="稍后";
+        dialog.GetOkButton().Text=okText;dialog.GetCancelButton().Text="稍后";
         return await Dialog(parent,dialog,()=>1,cancel)==1;
     }
     private static ConfirmationDialog Details(string title,string text)
     {
         var dialog=new ConfirmationDialog{Title=title,MinSize=new Vector2I(700,300)};
         var body=new VBoxContainer{Name="Details"};dialog.AddChild(body);
-        body.AddChild(new RichTextLabel{Text=text,BbcodeEnabled=false,ScrollActive=true,SizeFlagsVertical=Control.SizeFlags.ExpandFill,CustomMinimumSize=new Vector2(680,300)});
+        body.AddChild(new RichTextLabel{Text=text,BbcodeEnabled=false,SelectionEnabled=true,ScrollActive=true,SizeFlagsVertical=Control.SizeFlags.ExpandFill,CustomMinimumSize=new Vector2(680,300)});
         return dialog;
     }
     private static async Task<int> Dialog(Node parent,ConfirmationDialog dialog,Func<int> value,CancellationToken cancel)

@@ -22,8 +22,13 @@ internal static class AdmissionTransport
     public static Dictionary<string, string> Names { get; private set; } = [];
     private static SlotReservations _reservations = new();
     private static readonly Dictionary<ulong, ulong> People = [];
+    private static readonly Dictionary<ulong, PeerCapabilities> Capabilities = [];
+    public static string? ReloadBlockReason(IEnumerable<ulong> slots) => slots.Where(id => id != 1)
+        .Any(id => !Capabilities.TryGetValue(id, out var value) || !value.CanReload)
+            ? "有玩家未声明支持全员SL协议2，请统一版本并重新入房。" : null;
     private static readonly Dictionary<ENetPacketPeer, ulong> Pending = [];
     private static ulong _lastBroadcast;
+    private static int _emptyPackets;
     private static readonly System.Reflection.FieldInfo Connection = AccessTools.Field(typeof(ENetHost), "_connection");
     private static readonly System.Reflection.MethodInfo Receive = AccessTools.Method(typeof(ENetHost), "HandlePacketReceived");
     private static readonly System.Reflection.MethodInfo Handshake = AccessTools.Method(typeof(ENetHost), "DoClientHandshake");
@@ -31,8 +36,9 @@ internal static class AdmissionTransport
     public static void Reset()
     {
         Session = Guid.NewGuid().ToString("N"); ClaimToken = null; Names = [];
-        _reservations = new(); Pending.Clear(); People.Clear(); _lastBroadcast = 0;
+        _reservations = new(); Pending.Clear(); People.Clear(); Capabilities.Clear(); _lastBroadcast = 0; _emptyPackets = 0;
         ModSyncTransport.Reset();
+        NativeMessageCompatibility.Reset();
     }
     public static void SetNames(Dictionary<string, string> names)
     {
@@ -57,7 +63,7 @@ internal static class AdmissionTransport
     public static void AcceptHost(string session) => Session = session;
     private static AdmissionMessage Info() => new()
     {
-        Session = Session, Resume = LanSession.ResumeEntry != null,
+        Session = Session, Capabilities = LanCapability.Capabilities, NativeMessages = NativeMessageCompatibility.Capture(), Resume = LanSession.ResumeEntry != null,
         Revision = LanSession.ResumeEntry?.Revision ?? "", Name = LanSession.ResumeEntry?.Name ?? "新的多人冒险",
         Running = RunManager.Instance.IsInProgress,
         Count = LanSession.ResumeEntry?.PlayerCount ?? 4, Slots = LanSession.ResumeEntry?.Slots ?? [],
@@ -70,6 +76,8 @@ internal static class AdmissionTransport
         if (request.Operation == "info") return info;
         if (request.Operation != "reserve") throw new InvalidDataException("未知请求。");
         if (request.Session != Session || request.Revision != info.Revision) throw new InvalidOperationException("房间已更换存档，请刷新。");
+        var mapping = new NativeMessageMap(request.NativeMessages, info.NativeMessages);
+        GD.Print($"[STS2 LAN Co-op] 客机消息表校验：{request.NativeMessages.Count}种，需转换{mapping.ChangedCount}种。");
         if (info.Running) throw new InvalidOperationException("对局已开始，请等待主机保存退出后重新组队。");
         var slot = info.Resume ? request.Slot : request.Person;
         if (info.Resume && !info.Slots.Any(s => s.NativeId == slot && slot != 1))
@@ -80,7 +88,7 @@ internal static class AdmissionTransport
             throw new InvalidOperationException("当前玩家身份已在房间内，不能同时认领两个角色。");
         if (!info.Resume && occupied.Length + _reservations.ReservedSlots.Count() >= 4 && !_reservations.ReservedSlots.Contains(slot))
             throw new InvalidOperationException("房间已满，最多4人。");
-        var grant = _reservations.Reserve(request.Person, slot, request.Name, occupied);
+        var grant = _reservations.Reserve(request.Person, slot, request.Name, occupied, request.Capabilities);
         return info with { Token = grant.Token, Slot = slot };
     }
 
@@ -118,6 +126,16 @@ internal static class AdmissionTransport
         finally { peer?.PeerDisconnectNow(); connection.Destroy(); }
     }
 
+    // 期0诊断：握手报文只取前13字节，避免把角色预留令牌写进日志。
+    private static string Prefix(byte[] bytes) =>
+        Convert.ToHexString(bytes.AsSpan(0, Math.Min(bytes.Length, bytes.Length == 77 ? 13 : 48)));
+    private static string Chain(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var current = ex; current != null; current = current.InnerException) parts.Add($"{current.GetType().Name}：{current.Message}");
+        return string.Join(" → ", parts);
+    }
+
     public static void Update(ENetHost host)
     {
         if (Connection.GetValue(host) is not ENetConnection connection) return;
@@ -129,6 +147,12 @@ internal static class AdmissionTransport
             if (data.type == ENetConnection.EventType.Disconnect)
             { Pending.Remove(data.peer); continue; }
             if (data.type != ENetConnection.EventType.Receive) continue;
+            if (data.packetData.Length == 0)
+            {
+                // 防御空报文；alpha.2实测的进房失败并非空包，不能据此推断Android一定会发送空包。
+                if (_emptyPackets < 3) { _emptyPackets++; GD.Print($"[STS2 LAN Co-op] 忽略空报文（{_emptyPackets}/3），已丢弃。"); }
+                continue;
+            }
             try
             {
                 if (ModSyncTransport.IsControl(data.packetData))
@@ -148,7 +172,11 @@ internal static class AdmissionTransport
                 if (data.packetData.Length > 0 && data.packetData[0] == 0)
                 {
                     // One handshake per newly connected transport, with a short-lived slot claim.
-                    if (!Pending.Remove(data.peer)) continue;
+                    if (!Pending.Remove(data.peer))
+                    {
+                        GD.Print($"[STS2 LAN Co-op] 忽略未预登记的0类报文：长度{data.packetData.Length}，前缀{Prefix(data.packetData)}");
+                        continue;
+                    }
                     if (data.packetData.Length != 77 || !data.packetData.AsSpan(9, 4).SequenceEqual(AdmissionWire.Magic))
                         throw new InvalidDataException("请所有玩家统一使用支持角色接管的Mod版本。");
                     var id = BinaryPrimitives.ReadUInt64BigEndian(data.packetData.AsSpan(1, 8));
@@ -156,19 +184,25 @@ internal static class AdmissionTransport
                     if (RunManager.Instance.IsInProgress) throw new InvalidOperationException("对局已开始。");
                     var grant = _reservations.Consume(Encoding.ASCII.GetString(data.packetData, 13, 64), id);
                     People[id] = grant.Person;
+                    Capabilities[id] = grant.Capabilities;
                     var names = new Dictionary<string, string>(Names) { [id.ToString()] = grant.Name };
                     SetNames(names);
+                    GD.Print($"[STS2 LAN Co-op] 入房握手已受理：角色{id}，长度{data.packetData.Length}，前缀{Prefix(data.packetData)}");
                     data.packetData = data.packetData[..9];
-                    Receive.Invoke(host, [data]);
-                    _ = (Task)Handshake.Invoke(host, [data.peer])!;
+                    try { Receive.Invoke(host, [data]); }
+                    catch (Exception ex) { throw new InvalidOperationException("原版处理握手请求时报错。", ex); }
+                    try { _ = (Task)Handshake.Invoke(host, [data.peer])!; }
+                    catch (Exception ex) { throw new InvalidOperationException("原版握手应答失败。", ex); }
                     _lastBroadcast = 0;
                     continue;
                 }
-                Receive.Invoke(host, [data]);
+                try { Receive.Invoke(host, [data]); }
+                catch (Exception ex) { throw new InvalidOperationException($"原版处理入房报文时报错（长度{data.packetData.Length}）。", ex); }
             }
             catch (Exception ex)
             {
-                GD.PushWarning($"[STS2 LAN Co-op] 拒绝无效连接：{ex.GetBaseException().Message}");
+                // 期0诊断：记录报文长度与前缀（握手报文只取前13字节，不含令牌）和完整异常链。
+                GD.PushWarning($"[STS2 LAN Co-op] 拒绝无效连接：{Chain(ex)}；长度{data.packetData.Length}，前缀{Prefix(data.packetData)}\n{ex.GetBaseException().StackTrace}");
                 Pending.Remove(data.peer); data.peer.PeerDisconnectNow();
             }
         }
@@ -181,6 +215,7 @@ internal static class AdmissionTransport
             var live = host.ConnectedPeerIds.Append(1UL).Select(id => id.ToString()).ToHashSet();
             foreach (var key in Names.Keys.Except(live).ToArray()) Names.Remove(key);
             foreach (var key in People.Keys.Where(id => !live.Contains(id.ToString())).ToArray()) People.Remove(key);
+            foreach (var key in Capabilities.Keys.Where(id => !live.Contains(id.ToString())).ToArray()) Capabilities.Remove(key);
             Names["1"] = LanSession.Settings.PlayerName;
             var bytes = AdmissionWire.Encode(new() { Operation = "names", Names = new(Names) });
             // Wrap as an application message so the native client buffers it safely during handshake.
@@ -221,7 +256,10 @@ internal static class AdmissionClientNames
 {
     private static bool Prefix(ENetServiceData data)
     {
-        if (!LanSession.Active || data.packetData.Length < 2) return true;
+        if (!LanSession.Active) return true;
+        // 空报文无法被原版ENetPacket解析（PacketType取[0]越界），直接丢弃。
+        if (data.packetData.Length == 0) return false;
+        if (data.packetData.Length < 2) return true;
         var packet = new ENetPacket(data.packetData);
         if (packet.PacketType != ENetPacketType.ApplicationMessage) return true;
         var bytes = packet.AsAppMessage();

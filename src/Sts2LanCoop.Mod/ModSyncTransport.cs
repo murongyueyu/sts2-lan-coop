@@ -1,40 +1,27 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Godot;
 using MegaCrit.Sts2.Core.Multiplayer.Transport.ENet;
 using Sts2LanCoop.Core;
 namespace Sts2LanCoop.Mod;
 
-internal sealed record SyncMessage
-{
-    public string Operation {get;init;}="";
-    public string Revision {get;init;}="";
-    public string Hash {get;init;}="";
-    public long Offset {get;init;}
-    public long Size {get;init;}
-    public byte[] Data {get;init;}=[];
-    public string Error {get;init;}="";
-}
 internal static class ModSyncTransport
 {
-    private static readonly byte[] Magic=[0xF3,0x53,0x4D,1];
     private static Task<SyncProfile>? _profile;
     private static byte[]? _profileBytes;
     public static SyncProfile? Published=>_profile is {IsCompletedSuccessfully:true}?_profile.Result:null;
     public static void Reset(){_profile=null;_profileBytes=null;}
     public static void Warm(){_profile??=ModSyncInventory.HostProfile();}
-    public static bool IsControl(byte[] bytes)=>bytes.Length>=4&&bytes.AsSpan(0,4).SequenceEqual(Magic);
-    private static byte[] Encode(SyncMessage msg)=>[..Magic,..JsonSerializer.SerializeToUtf8Bytes(msg)];
-    private static SyncMessage Decode(byte[] bytes)
-    {
-        if(!IsControl(bytes)||bytes.Length>96*1024)throw new InvalidDataException("同步报文不受支持或过大。");
-        return JsonSerializer.Deserialize<SyncMessage>(bytes.AsSpan(4))??throw new InvalidDataException("同步报文为空。");
-    }
+    public static bool IsControl(byte[] bytes)=>SyncTransferWire.IsControl(bytes);
+    private static byte[] Encode(SyncMessage msg)=>SyncTransferWire.Encode(msg);
+    private static SyncMessage Decode(byte[] bytes)=>SyncTransferWire.Decode(bytes);
     public static void Serve(ENetPacketPeer peer,byte[] bytes)
     {
         SyncMessage response;
+        var request=Decode(bytes);
         try
         {
-            var request=Decode(bytes);_profile??=ModSyncInventory.HostProfile();
+            _profile??=ModSyncInventory.HostProfile();
             if(!_profile.IsCompleted)response=new(){Operation="pending"};
             else
             {
@@ -53,7 +40,7 @@ internal static class ModSyncTransport
                     {
                         var body=_profileBytes??=JsonSerializer.SerializeToUtf8Bytes(profile);
                         if(request.Offset>=body.Length)throw new InvalidDataException("资料偏移越界。");
-                        response=new(){Offset=request.Offset,Data=body.AsSpan((int)request.Offset,Math.Min(48*1024,body.Length-(int)request.Offset)).ToArray()};
+                        response=new(){Offset=request.Offset,Data=body.AsSpan((int)request.Offset,Math.Min(SyncTransferWire.ChunkSize,body.Length-(int)request.Offset)).ToArray()};
                     }
                     else if(request.Operation=="chunk")
                     {
@@ -61,14 +48,16 @@ internal static class ModSyncTransport
                         var mod=profile.Mods.FirstOrDefault(m=>m.Bundle.Length==64&&m.Bundle==request.Hash)??throw new IOException("文件未共享。");
                         if(request.Offset>=mod.BundleSize)throw new InvalidDataException("文件偏移越界。");
                         using var file=File.OpenRead(Path.Combine(ModSyncInventory.Cache,mod.Bundle+".zip"));file.Position=request.Offset;
-                        var data=new byte[(int)Math.Min(48*1024,mod.BundleSize-request.Offset)];file.ReadExactly(data);
+                        var data=new byte[(int)Math.Min(SyncTransferWire.ChunkSize,mod.BundleSize-request.Offset)];file.ReadExactly(data);
                         response=new(){Offset=request.Offset,Data=data};
                     }
                     else throw new InvalidDataException("未知同步请求。");
                 }
             }
         }
-        catch(Exception ex){response=new(){Error=ex.GetBaseException().Message};}
+        catch(Exception ex){var error=ex.GetBaseException().Message;response=new(){Error=error[..Math.Min(error.Length,512)]};}
+        response=response with{RequestId=request.RequestId,Operation=response.Operation.Length>0?response.Operation:request.Operation,
+            Revision=response.Revision.Length>0?response.Revision:request.Revision,Hash=response.Hash.Length>0?response.Hash:request.Hash};
         peer.Send(0,Encode(response),1);
     }
     internal sealed class Client:IDisposable
@@ -77,6 +66,10 @@ internal static class ModSyncTransport
         private readonly SceneTree _tree;
         private ENetPacketPeer? _peer;
         private bool _connected;
+        private bool _busy;
+        private bool _disposed;
+        private int _nextId;
+        private int _discardThrough;
         public Client(SceneTree tree,Endpoint endpoint)
         {
             _tree=tree;
@@ -85,26 +78,107 @@ internal static class ModSyncTransport
         }
         public async Task<SyncMessage> Request(SyncMessage request,CancellationToken cancel)
         {
-            var deadline=Time.GetTicksMsec()+20000;var sent=false;
-            while(Time.GetTicksMsec()<deadline)
+            Enter();
+            try
             {
                 cancel.ThrowIfCancellationRequested();
-                if(_connected&&!sent){_peer!.Send(0,Encode(request),1);sent=true;}
-                for(var i=0;i<128&&_connection.TryService(out var data);i++)
+                request=request with{RequestId=checked(++_nextId)};
+                var deadline=Time.GetTicksMsec()+20000;var sent=false;
+                while(Time.GetTicksMsec()<deadline)
                 {
-                    var ev=data!.Value;
-                    if(ev.type==ENetConnection.EventType.Connect)_connected=true;
-                    if(ev.type==ENetConnection.EventType.Disconnect)throw new IOException("主机断开了同步连接。");
-                    if(ev.type==ENetConnection.EventType.Receive)
+                    cancel.ThrowIfCancellationRequested();
+                    ObjectDisposedException.ThrowIf(_disposed,this);
+                    if(_connected&&!sent){_peer!.Send(0,Encode(request),1);sent=true;}
+                    foreach(var response in Poll())
                     {
-                        var response=Decode(ev.packetData);
-                        if(response.Error.Length>0)throw new IOException(response.Error);
+                        CheckResponse(response,request);
                         return response;
                     }
+                    await _tree.ToSignal(_tree,SceneTree.SignalName.ProcessFrame);
                 }
-                await _tree.ToSignal(_tree,SceneTree.SignalName.ProcessFrame);
+                throw new TimeoutException("同步超时，请检查UDP地址和隧道。下载缓存保留，可重试。");
             }
-            throw new TimeoutException("同步超时，请检查UDP地址和隧道。下载缓存保留，可重试。");
+            finally { _discardThrough=_nextId; _busy=false; }
+        }
+        private void Enter()
+        {
+            ObjectDisposedException.ThrowIf(_disposed,this);
+            if(_busy)throw new InvalidOperationException("同一同步连接正在执行操作，请等待完成或取消。");
+            _busy=true;
+        }
+        private IEnumerable<SyncMessage> Poll()
+        {
+            ObjectDisposedException.ThrowIf(_disposed,this);
+            for(var i=0;i<128&&_connection.TryService(out var data);i++)
+            {
+                var ev=data!.Value;
+                if(ev.type==ENetConnection.EventType.Connect)_connected=true;
+                if(ev.type==ENetConnection.EventType.Disconnect)throw new IOException("房主断开了同步连接，请确认双方使用0.7.0-alpha.6或更新的同版Mod。");
+                if(ev.type==ENetConnection.EventType.Receive)
+                {
+                    var response=Decode(ev.packetData);
+                    if(response.RequestId<=_discardThrough)continue; // Late replies of an already canceled/completed operation.
+                    yield return response;
+                }
+            }
+        }
+        private static void CheckResponse(SyncMessage response,SyncMessage request)
+        {
+            if(response.RequestId!=request.RequestId)throw new IOException("同步响应与请求编号不匹配。");
+            if(response.Error.Length>0)throw new IOException(response.Error);
+            if(response.Operation=="pending")return;
+            if(response.Operation!=request.Operation || request.Revision.Length>0&&response.Revision!=request.Revision ||
+                request.Hash.Length>0&&response.Hash!=request.Hash)
+                throw new IOException("同步响应的操作、清单或文件摘要不匹配。");
+        }
+        private async Task DownloadWindow(FileStream file,SyncProfile profile,SyncMod mod,Action<string> progress,CancellationToken cancel)
+        {
+            Enter();
+            var window=new SyncDownloadWindow(mod.BundleSize,file.Length);
+            var pending=new Dictionary<int,SyncMessage>();
+            var watch=Stopwatch.StartNew();var started=file.Length;
+            var idleDeadline=Time.GetTicksMsec()+20000;
+            var lastProgress=0L;
+            try
+            {
+                while(!window.Complete)
+                {
+                    cancel.ThrowIfCancellationRequested();
+                    ObjectDisposedException.ThrowIf(_disposed,this);
+                    if(_connected)
+                        foreach(var offset in window.Fill())
+                        {
+                            var request=new SyncMessage{RequestId=checked(++_nextId),Operation="chunk",Revision=profile.Revision,Hash=mod.Bundle,Offset=offset};
+                            pending.Add(request.RequestId,request);
+                            _peer!.Send(0,Encode(request),1);
+                        }
+                    foreach(var response in Poll())
+                    {
+                        cancel.ThrowIfCancellationRequested();
+                        if(!pending.Remove(response.RequestId,out var expected))throw new IOException("收到未请求或重复的下载分片。");
+                        CheckResponse(response,expected);
+                        if(response.Operation=="pending")throw new IOException("主机资料在下载中尚未就绪，请重新检查。");
+                        if(response.Offset!=expected.Offset)throw new IOException("下载分片偏移与请求不一致。");
+                        window.Receive(response.Offset,response.Data);
+                        idleDeadline=Time.GetTicksMsec()+20000;
+                        while(window.TakeNext(out var bytes))
+                        {
+                            cancel.ThrowIfCancellationRequested();file.Write(bytes);
+                            if(watch.ElapsedMilliseconds-lastProgress>=200 || file.Length==mod.BundleSize)
+                            {
+                                var speed=(file.Length-started)/Math.Max(.001,watch.Elapsed.TotalSeconds)/1024/1024;
+                                progress($"{mod.Name}：{file.Length*100/mod.BundleSize}% · {speed:F2} MiB/s（{file.Length/1024}/{mod.BundleSize/1024} KiB）");
+                                cancel.ThrowIfCancellationRequested();
+                                lastProgress=watch.ElapsedMilliseconds;
+                            }
+                        }
+                    }
+                    if(!window.Complete && Time.GetTicksMsec()>idleDeadline)
+                        throw new TimeoutException("同步分片等待超时，连续缓存保留，可重试续传。");
+                    if(!window.Complete)await _tree.ToSignal(_tree,SceneTree.SignalName.ProcessFrame);
+                }
+            }
+            finally { _discardThrough=_nextId; _busy=false; }
         }
         public async Task<SyncProfile> Profile(CancellationToken cancel)
         {
@@ -132,29 +206,28 @@ internal static class ModSyncTransport
         }
         public async Task<string> Download(SyncProfile profile,SyncMod mod,Action<string> progress,CancellationToken cancel)
         {
+            ObjectDisposedException.ThrowIf(_disposed,this);
+            cancel.ThrowIfCancellationRequested();
+            if(_busy)throw new InvalidOperationException("同步连接正在执行其他操作。");
             if(mod.Bundle.Length!=64||!mod.Bundle.All(char.IsAsciiHexDigit)||mod.BundleSize is <=0 or >ModSyncFiles.MaxPackageSize)
                 throw new IOException(mod.Name+"："+mod.Unavailable+"；可改选工坊或请主机开启共享。");
             Directory.CreateDirectory(ModSyncInventory.Cache);var target=Path.Combine(ModSyncInventory.Cache,mod.Bundle+".zip");
             if(File.Exists(target))
             {
                 if(await Task.Run(()=>ModSyncRules.FileHash(target))!=mod.Bundle)throw new IOException("缓存校验失败，请清除损坏文件："+target);
-                await Task.Run(()=>ModSyncFiles.VerifyMod(target,mod));return target;
+                await Task.Run(()=>ModSyncFiles.VerifyMod(target,mod));cancel.ThrowIfCancellationRequested();return target;
             }
             var partial=target+".partial";
             using(var file=new FileStream(partial,FileMode.OpenOrCreate,System.IO.FileAccess.Write,FileShare.None))
             {
                 if(file.Length>mod.BundleSize)throw new IOException("缓存大小异常。");file.Position=file.Length;
-                while(file.Length<mod.BundleSize)
-                {
-                    var response=await Request(new(){Operation="chunk",Revision=profile.Revision,Hash=mod.Bundle,Offset=file.Length},cancel);
-                    if(response.Offset!=file.Length||response.Data.Length==0||file.Length+response.Data.Length>mod.BundleSize)throw new IOException("下载分片无效。");
-                    file.Write(response.Data);progress($"{mod.Name}：{file.Length*100/mod.BundleSize}%（{file.Length/1024}/{mod.BundleSize/1024} KiB）");
-                }
+                await DownloadWindow(file,profile,mod,progress,cancel);
+                cancel.ThrowIfCancellationRequested();
                 file.Flush(true);
             }
             if(await Task.Run(()=>ModSyncRules.FileHash(partial))!=mod.Bundle){File.Delete(partial);throw new IOException("下载校验失败，损坏分片已清除，可重试。");}
-            await Task.Run(()=>ModSyncFiles.VerifyMod(partial,mod));File.Move(partial,target);return target;
+            await Task.Run(()=>ModSyncFiles.VerifyMod(partial,mod));cancel.ThrowIfCancellationRequested();File.Move(partial,target);return target;
         }
-        public void Dispose(){_peer?.PeerDisconnectNow();_peer=null;_connection.Destroy();_connection.Dispose();}
+        public void Dispose(){if(_disposed)return;_disposed=true;_peer?.PeerDisconnectNow();_peer=null;_connection.Destroy();_connection.Dispose();}
     }
 }

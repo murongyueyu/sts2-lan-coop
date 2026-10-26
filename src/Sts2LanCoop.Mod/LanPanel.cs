@@ -28,7 +28,12 @@ internal sealed class LanPanel
     private CancellationTokenSource? _requestCancel;
     private readonly Button _host;
     private readonly Button _join;
+    private readonly Button _sync;
+    private readonly Button _restore;
+    private readonly Button _unlock;
     private readonly Button _close;
+    private readonly string? _hostBlock;
+    private readonly string? _joinBlock;
     private JoinFlow? _flow;
     private bool _busy;
     private bool _disposed;
@@ -54,6 +59,9 @@ internal sealed class LanPanel
         // Load before creating UI: malformed config is preserved and logged, never regenerated silently.
         var settings = LanSession.Settings;
         _menu = menu;
+        // 期1能力矩阵：客机与主机分别判定，Android只在客机侧放开。
+        _hostBlock = LanSession.GetHostBlockReason();
+        _joinBlock = LanSession.GetJoinBlockReason();
         _layer = new CanvasLayer { Name = "LanCoopPanel", Layer = 100 };
         menu.AddChild(_layer);
         var backdrop = new ColorRect { Color = new Color(0, 0, 0, 0.85f) };
@@ -80,6 +88,7 @@ internal sealed class LanPanel
         _body.AddChild(_shareMods);
         _runName = Input("新对局名称", $"多人冒险 {DateTime.Now:MM-dd HH:mm}");
         _host = Button("创建四人房间", Host);
+        if (_hostBlock != null) { _host.Disabled = _shareMods.Disabled = true; Text("建房不可用：" + _hostBlock, 20); }
         Text("继续多人对局", 26);
         Text("选择存档后，等待相同人数到齐。客机可以由其他朋友接替。", 20);
         _saves = new VBoxContainer(); _body.AddChild(_saves);
@@ -88,24 +97,30 @@ internal sealed class LanPanel
         _address = Input("房主 IP / 域名:端口", settings.RecentConnections.FirstOrDefault() ?? "");
         _address.PlaceholderText = "例如 room.example.com:45678";
         Button("查看房间 / 刷新可选角色", () => _ = Inspect());
-        Button("检查 / 同步主机模组", () => _ = SyncMods());
-        Button("恢复最近一次同步前的模组配置", () => _ = RestoreMods());
+        _sync = Button(LanCapability.Android ? "检查 / 下载主机模组（手动导入）" : "检查 / 同步主机模组", () => _ = SyncMods());
+        _restore = Button("恢复最近一次同步前的模组配置", () => _ = RestoreMods());
+        if (LanCapability.ModSyncBlockReason is { } syncBlock)
+        {
+            _sync.Disabled = !LanCapability.CanInspectMods; _restore.Disabled = true;
+            Text("自动应用不可用：" + syncBlock, 20);
+            if (LanCapability.Android) Text("可检查差异并下载主机包；下载不代表Android兼容，也不会自动安装或调整启用状态。", 20);
+        }
         _slots = new VBoxContainer(); _body.AddChild(_slots);
         _join = Button("连接", () => _ = Join());
-        _address.TextSubmitted += text => { if (!_busy) _ = Join(); };
+        if (_joinBlock != null) _join.Disabled = true;
+        _address.TextSubmitted += text => { if (!_busy && _joinBlock == null) _ = Join(); };
         foreach (var recent in settings.RecentConnections)
             Button($"最近连接：{recent}", () => { if (!_busy) _address.Text = recent; });
-        _status = Text("Radmin：填写房主虚拟 IP；樱花：填写节点域名和外部 UDP 端口。", 20);
-        Button("共用原版 / 模组解锁（进行中的对局分开）",()=>{if(!_busy)SharedUnlocks.Configure(_menu,text=>{if(!_disposed)_status.Text=text;});});
+        _status = Text(LanCapability.Windows
+            ? "Radmin：填写房主虚拟 IP；樱花：填写节点域名和外部 UDP 端口。"
+            : "手机端本期只开放客机加入：填写房主虚拟 IP，或樱花节点域名和外部端口后点击连接。", 20);
+        if (_joinBlock != null) _status.Text = _joinBlock;
+        _unlock = Button("共用原版 / 模组解锁（进行中的对局分开）",()=>{if(!_busy)SharedUnlocks.Configure(_menu,text=>{if(!_disposed)_status.Text=text;});});
+        if (LanCapability.SharedUnlockBlockReason is { } unlockBlock) { _unlock.Disabled = true; Text("共用解锁不可用：" + unlockBlock, 20); }
         _reloadKey = Input("快速SL快捷键（例如Ctrl+F8；off关闭；换角色需保存退出后重新入房）", settings.QuickReloadHotkey);
+        if (LanCapability.QuickReloadBlockReason is { } reloadBlock) Text("快速SL不可用：" + reloadBlock, 20);
         Button("保存联机和快捷键设置", () => { if (!_busy) { try { ApplySettings(); _status.Text = "设置已保存。"; } catch (Exception ex) { _status.Text = ex.Message; } } });
         _close = Button("关闭", CloseOrCancel);
-        var block = LanSession.GetBlockReason();
-        if (block != null)
-        {
-            _status.Text = block;
-            _host.Disabled = _join.Disabled = true;
-        }
         _layer.TreeExiting += () => { _disposed = true; _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); };
         RefreshSaves();
         ModSyncWorkflow.ShowPending(_menu, value => _address.Text=value, value => {if(!_disposed)_status.Text=value;});
@@ -175,7 +190,11 @@ internal sealed class LanPanel
             { _status.Text = error; return; }
             SetBusy(true);
             _requestCancel = new();
-            if (!await ModSyncWorkflow.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token)) return;
+            // 期1：Android跳过依赖Windows的模组同步检查；准入协议校验仍在LanSession.Join内执行。
+            if (LanCapability.Windows &&
+                !await ModSyncWorkflow.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token)) return;
+            if (LanCapability.Android &&
+                !await MobileModSync.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token, offerDownload: false)) return;
             _status.Text = "正在连接并检查兼容性……";
             if (_inspectedEndpoint != endpoint) { _inspected = null; _chosenSlot = null; }
             if (_inspected == null)
@@ -193,7 +212,7 @@ internal sealed class LanPanel
         catch (OperationCanceledException) { if (!_disposed) _status.Text = "连接已取消或超时，请检查地址、组网和 UDP 隧道。"; }
         catch (ClientConnectionFailedException ex)
         {
-            if (!_disposed) _status.Text = $"连接失败：{ex.info}。请核对游戏版本、玩法 Mod 和网络状态。";
+            if (!_disposed) _status.Text = $"连接失败：{ex.info}。本机游戏 {GameBuild.Version}；请核对双方游戏版本与 Mod 版本是否一致，以及 UDP 隧道。";
             GD.PushWarning($"[STS2 LAN Co-op] {ex}");
         }
         catch (Exception ex)
@@ -212,11 +231,15 @@ internal sealed class LanPanel
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        _host.Disabled = _join.Disabled = busy || LanSession.GetBlockReason()!=null;
+        _host.Disabled = busy || _hostBlock != null;
+        _join.Disabled = busy || _joinBlock != null;
+        _sync.Disabled = busy || !LanCapability.CanInspectMods;
+        _restore.Disabled = busy || LanCapability.ModSyncBlockReason != null;
+        _unlock.Disabled = busy || LanCapability.SharedUnlockBlockReason != null;
         _name.Editable = _port.Editable = _address.Editable = !busy;
         _runName.Editable = !busy;
         _reloadKey.Editable = !busy;
-        _shareMods.Disabled = busy;
+        _shareMods.Disabled = busy || _hostBlock != null;
         _close.Text = busy ? "取消连接" : "关闭";
     }
 
@@ -234,7 +257,9 @@ internal sealed class LanPanel
             ApplySettings();
             if(!Endpoint.TryParse(_address.Text,out var endpoint,out var error))throw new InvalidDataException(error);
             SetBusy(true);_requestCancel=new();
-            await ModSyncWorkflow.Check(_menu,endpoint!,text=>{if(!_disposed)_status.Text=text;},_requestCancel.Token);
+            if (LanCapability.Android)
+                await MobileModSync.Check(_menu,endpoint!,text=>{if(!_disposed)_status.Text=text;},_requestCancel.Token, offerDownload: true);
+            else await ModSyncWorkflow.Check(_menu,endpoint!,text=>{if(!_disposed)_status.Text=text;},_requestCancel.Token);
         }
         catch(OperationCanceledException){if(!_disposed)_status.Text="同步已取消，下载缓存保留。";}
         catch(Exception ex){if(!_disposed)_status.Text=ex.Message;GD.PushWarning(ex.ToString());}
@@ -263,7 +288,7 @@ internal sealed class LanPanel
                 row.AddChild(new Label { Text = $"{entry.Name} · {entry.PlayerCount}人 · 第{entry.Act}幕/{entry.Floor}层 · {entry.SavedAt.ToLocalTime():MM-dd HH:mm} · {(entry.ModEnvironment.Length==0?"历史模组环境未记录":"已记录模组环境")}" });
                 var rename = new LineEdit { Text = entry.Name, MaxLength = 40 }; row.AddChild(rename);
                 var actions = new HBoxContainer(); row.AddChild(actions);
-                var resume = new Button { Text = "继续此对局", CustomMinimumSize = new Vector2(200, 48) }; actions.AddChild(resume);
+                var resume = new Button { Text = "继续此对局", CustomMinimumSize = new Vector2(200, 48), Disabled = _hostBlock != null }; actions.AddChild(resume);
                 resume.Pressed += () =>
                 {
                     if (_busy) return;

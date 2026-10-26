@@ -4,9 +4,17 @@ using System.Text.Json.Serialization;
 
 namespace Sts2LanCoop.Core;
 
+public sealed record PeerCapabilities
+{
+    public string Platform { get; init; } = "";
+    public int ReloadVersion { get; init; }
+    public bool CanReload => ReloadVersion == 2 && Platform is "Windows" or "Android";
+}
+
 public sealed record AdmissionMessage
 {
-    public int Protocol { get; init; } = 3;
+    public int Protocol { get; init; } = 5;
+    public PeerCapabilities Capabilities { get; init; } = new();
     public string Operation { get; init; } = "info";
     public string Error { get; init; } = "";
     public string Session { get; init; } = "";
@@ -23,6 +31,7 @@ public sealed record AdmissionMessage
     public List<SlotSummary> Slots { get; init; } = [];
     public Dictionary<string, string> Names { get; init; } = [];
     public List<string> Occupied { get; init; } = [];
+    public List<string> NativeMessages { get; init; } = [];
 }
 
 public static class AdmissionWire
@@ -39,7 +48,7 @@ public static class AdmissionWire
     {
         if (!IsControl(data) || data.Length > 512 * 1024 + 4) throw new InvalidDataException("无效的联机控制报文。");
         var message = JsonSerializer.Deserialize<AdmissionMessage>(data.AsSpan(4)) ?? throw new InvalidDataException("控制报文为空。");
-        if (message.Protocol != 3) throw new InvalidDataException("联机协议版本不同，请统一Mod版本。");
+        if (message.Protocol != 5) throw new InvalidDataException("联机协议版本不同，请所有玩家统一安装0.7.0-alpha.6或更新的同版Mod。");
         return message;
     }
 }
@@ -48,10 +57,13 @@ public sealed class SlotReservations(Func<DateTimeOffset>? clock = null)
 {
     private readonly Dictionary<string, Grant> _grants = [];
     private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
-    public sealed record Grant(string Token, ulong Person, ulong Slot, string Name, DateTimeOffset Expires);
+    public sealed record Grant(string Token, ulong Person, ulong Slot, string Name, DateTimeOffset Expires)
+    {
+        public PeerCapabilities Capabilities { get; init; } = new();
+    }
     public void Expire()
     { foreach (var key in _grants.Where(p => p.Value.Expires <= _clock()).Select(p => p.Key).ToArray()) _grants.Remove(key); }
-    public Grant Reserve(ulong person, ulong slot, string name, IEnumerable<ulong> occupied)
+    public Grant Reserve(ulong person, ulong slot, string name, IEnumerable<ulong> occupied, PeerCapabilities? capabilities = null)
     {
         Expire();
         name = name.Trim();
@@ -61,7 +73,7 @@ public sealed class SlotReservations(Func<DateTimeOffset>? clock = null)
             throw new InvalidOperationException("该角色已被其他人认领，请刷新。");
         foreach (var key in _grants.Where(p => p.Value.Person == person).Select(p => p.Key).ToArray()) _grants.Remove(key);
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        return _grants[token] = new Grant(token, person, slot, name, _clock().AddSeconds(30));
+        return _grants[token] = new Grant(token, person, slot, name, _clock().AddSeconds(30)) { Capabilities = capabilities ?? new() };
     }
     public Grant Consume(string token, ulong slot)
     {

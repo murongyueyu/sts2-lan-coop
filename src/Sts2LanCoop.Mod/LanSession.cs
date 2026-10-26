@@ -27,10 +27,9 @@ internal static class LanSession
 
     public static void Save() => Store.Save(Settings);
 
+    // 与平台无关的公共检查：游戏版本、外部QuickSL和重复的LAN Mod。
     public static string? GetBlockReason()
     {
-        if (OS.GetName() != "Windows")
-            return "此开发版仅在 Windows 提供连接入口。手机端先使用启动器内置 LAN；不要叠加网络补丁。";
         var version = MegaCrit.Sts2.Core.Debug.ReleaseInfoManager.Instance.ReleaseInfo?.Version;
         if (!GameBuild.Supported)
             return $"当前游戏版本 {version ?? "未知"}，此DLL支持v0.107.1和v0.111.0。";
@@ -46,6 +45,10 @@ internal static class LanSession
         });
         return conflict == null ? null : $"检测到其他 LAN Mod：{conflict.GetName().Name}。请在独立测试配置中仅启用一个 LAN Mod，并重启游戏。";
     }
+
+    // 期1起按能力判定：Android只放宽客机加入，主机等其他入口各自返回原因。
+    public static string? GetJoinBlockReason() => LanCapability.JoinBlockReason ?? GetBlockReason();
+    public static string? GetHostBlockReason() => LanCapability.HostBlockReason ?? GetBlockReason();
 
     private static NSubmenuStack Stack(NMultiplayerSubmenu menu) =>
         (NSubmenuStack)(AccessTools.Field(typeof(NSubmenu), "_stack")?.GetValue(menu)
@@ -67,6 +70,7 @@ internal static class LanSession
 
     public static NetHostGameService Host(NMultiplayerSubmenu menu, string? name = null, RunEntry? resume = null)
     {
+        if (GetHostBlockReason() is { } blocked) throw new InvalidOperationException(blocked);
         if (resume == null) SaveLibrary.New(name); else SaveLibrary.Select(resume);
         var run = resume == null ? null : SaveLibrary.Decode(SaveLibrary.Catalog.ReadPayload(resume));
         if (run != null) run = RunManager.CanonicalizeSave(run, 1);
@@ -107,6 +111,7 @@ internal static class LanSession
         ulong? selectedSlot = null, AdmissionMessage? inspected = null)
     {
         if (QuickReload.Busy) throw new InvalidOperationException("请等待本次SL及恢复结束后再入房。");
+        if (GetJoinBlockReason() is { } blocked) throw new InvalidOperationException(blocked);
         // Preserve any native LAN save before the client can overwrite its working file.
         SaveLibrary.ImportWorking();
         Begin(Settings.PlayerId);
@@ -123,10 +128,13 @@ internal static class LanSession
             var grant = await AdmissionTransport.Request(menu.GetTree(), endpoint, new()
             {
                 Operation = "reserve", Session = info.Session, Revision = info.Revision,
+                NativeMessages = NativeMessageCompatibility.Capture(),
+                Capabilities = LanCapability.Capabilities,
                 Person = Settings.PlayerId, Name = Settings.PlayerName, Slot = selectedSlot ?? Settings.PlayerId
             }, flow.CancelToken.Token);
             LocalId = grant.Slot;
             AdmissionTransport.AcceptHost(info.Session);
+            NativeMessageCompatibility.AcceptHost(grant.NativeMessages);
             AdmissionTransport.ClaimToken = grant.Token;
             AdmissionTransport.SetNames(grant.Names);
             AdmissionTransport.Names[LocalId.ToString()] = Settings.PlayerName;
