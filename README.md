@@ -7,7 +7,7 @@
 ![game](https://img.shields.io/badge/game-v0.107.1%20%7C%20v0.111.0-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**, adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, host mod synchronization with exact-version packages, and optional shared unlock progress. All players in a room must still run the same game version. GPL-3.0.
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**, adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, host mod synchronization with exact-version packages, and optional shared unlock progress. All players in a room must still run the same game version. Android guests are supported. GPL-3.0.
 
 ## 安装（下载即用）
 
@@ -38,6 +38,7 @@
 | 问题 | 本项目提供的做法 |
 | --- | --- |
 | 原版只有 Steam 联机 | IPv4 / 域名直连，可配置 UDP 监听端口、复制网卡与樱花外部地址、记住最近成功连接 |
+| 想在手机上和朋友一起玩 | **Android（Sts2MobileLauncher）客机联机**：查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较/下载主机模组包后手动导入 |
 | 一局结束就得重开 | 每局独立命名存档 + 「继续多人对局」列表，可重命名后接着打 |
 | 朋友退坑后存档就废了 | 客机可**接替**离线朋友的角色，或彼此**互换**；进度完整保留，不需要原朋友在线 |
 | 打崩了要全员重开房间 | 「快速 SL · 全员重载」：暂停菜单一键或 `Ctrl+F8`，**保留连接和当前角色**回到最近保存点 |
@@ -55,14 +56,14 @@
 
 ## 当前状态
 
-**alpha 开发版，尚未完成跨设备与手机验收。**
+**alpha 开发版；Android 客机联机已支持并开放，跨网络整局与不同启动器版本仍以实际反馈为准。**
 
 - 已在本机以真实引擎 + 四个独立游戏进程验证到首个 MapRoom，并覆盖满员拒绝、端口占用、取消、准备同步、存档与快速 SL。
 - 主机模组同步已实现同端口版本包传输、完整文件校验、进度/取消/断点缓存、退出后事务式应用与恢复；**自动应用为 Windows 专用**，Android 客机可比较、下载主机包到本机缓存，退出后用启动器手动导入。
 - 共用解锁默认关闭，只作用于当前账号同编号存档栏，关闭开关**不会撤销**已合并的进度；开启前请确保已备份。
 - 单 DLL 双版本：同一份 DLL 在 v0.107.1 与 v0.111.0 上加载，运行时探测接口差异；**两个版本之间不能互联**，命名存档记录来源游戏版本，不跨版本强载载荷。
-- **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透、手机接入和完整一局的跨设备验收仍未完成。
-- 手机目标环境为 Sts2MobileLauncher；0.7.0 系列已开放 Android 客机入口（准入 5），真机进房与跨网络整局仍在验证，不能宣称手机可用。
+- **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透与完整一局的跨设备、跨网络验收仍在进行；Android 客机联机已支持。
+- **现已支持 Android（Sts2MobileLauncher）客机联机**：手机可查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较、下载主机模组包后手动导入；手机端需同游戏版本与同 Mod 版本。手机建房、共用解锁与模组自动应用仍仅 Windows。
 - 快速 SL 的效果参照手动保存退出再继续：未持久化的操作可以重做，但不保证所有选项重置，也不保证随机结果改变。
 
 暂不支持：游戏中途加入、人数变化、房主迁移、密码房、自动搜房、自动重连、跨版本互通、独立服务器。
