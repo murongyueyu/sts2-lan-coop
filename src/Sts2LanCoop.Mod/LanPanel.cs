@@ -73,7 +73,7 @@ internal sealed class LanPanel
         _body.AddThemeConstantOverride("separation", 14);
         scroll.AddChild(_body);
         Text("局域网 / 地址直连 · 最多4人", 32);
-        Text("v0.107.1 · 新建或继续多人冒险 · 继续时人数固定，主机角色固定", 20);
+        Text($"{GameBuild.Version} · 新建或继续多人冒险 · 继续时人数固定，主机角色固定", 20);
         _name = Input("当前昵称（所有玩家可见，跟随本次加入的人）", settings.PlayerName);
         _port = Input("房主 UDP 监听端口", settings.HostPort.ToString());
         _shareMods = new CheckButton {Text="允许向加入者分享本房间所需模组（请确认有权分享；不含游戏、存档和账号）",ButtonPressed=settings.ShareMods};

@@ -50,7 +50,7 @@ internal static class SaveLibrary
         await manager.SaveRun(Decode(bytes), true);
     }
     public static string WorkingPath => ProjectSettings.GlobalizePath(
-        SaveManager.Instance.GetProfileScopedPath(Path.Combine(UserDataPathProvider.SavesDir, RunSaveManager.multiplayerRunSaveFileName)));
+        GameBuild.ScopedPath(Path.Combine(UserDataPathProvider.SavesDir, RunSaveManager.multiplayerRunSaveFileName)));
     public static RunCatalog Catalog
     {
         get
@@ -70,6 +70,7 @@ internal static class SaveLibrary
     public static void Select(RunEntry entry)
     {
         CheckIdleWrites();
+        if(entry.GameVersion!=GameBuild.Version)throw new InvalidOperationException("存档来自不同游戏版本，请使用对应版本；不能直接跨版本续局。");
         if(entry.ModEnvironment.Length>0 && entry.ModEnvironment!=ModSyncInventory.LastEnvironment &&
             !(entry.ModProfile.Count>0 && ModSyncInventory.EnvironmentHash(entry.ModProfile)==ModSyncInventory.LastEnvironment))
             throw new InvalidOperationException("存档模组环境与本次加载不同（或尚在检查）。请恢复该存档的模组版本后重试。");
@@ -113,6 +114,7 @@ internal static class SaveLibrary
     }
     private static RunEntry Summarize(SerializableRun run) => new()
     {
+        GameVersion=GameBuild.Version,
         PlayerCount = run.Players.Count, Act = run.CurrentActIndex + 1,
         Floor = run.VisitedMapCoords.Count,
         Slots = run.Players.Select(p => new SlotSummary

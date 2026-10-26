@@ -46,7 +46,7 @@ public static class ModSyncRules
     public static readonly string[] ConflictingIds = ["QuickSL", "sts2_lan_connect", "LanSpire", "DirectConnectIP", "AutoModSubscriber"];
     public static HashSet<string> Required(SyncProfile host)
     {
-        if (host.Schema != 1 || host.Game != "v0.107.1" || host.Platform != "Windows-x64" || host.Mods.Count > 1024 ||
+        if (host.Schema != 1 || host.Game is not ("v0.107.1" or "v0.111.0") || host.Platform != "Windows-x64" || host.Mods.Count > 1024 ||
             host.Mods.Any(m => string.IsNullOrWhiteSpace(m.Id) || m.Id.Length>160) || host.Mods.Select(m=>m.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=host.Mods.Count)
             throw new InvalidDataException("主机模组清单格式、游戏或平台不受支持。");
         var required = host.Mods.Where(m=>m.Gameplay || m.Id==CoreId).Select(m=>m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -69,9 +69,10 @@ public static class ModSyncRules
         foreach(var id in required.ToArray())Visit(id);
         return required;
     }
-    public static SyncComparison Compare(SyncProfile host, IReadOnlyList<SyncMod> local)
+    public static SyncComparison Compare(SyncProfile host, IReadOnlyList<SyncMod> local,string localGame="v0.107.1")
     {
         var result=new SyncComparison();
+        if(host.Game!=localGame){result.Errors.Add("游戏版本不同，不能同步入房；所有人需要相同游戏版本。");return result;}
         var required=Required(host);
         foreach(var duplicate in local.Where(m=>m.Loaded).GroupBy(m=>m.Id,StringComparer.OrdinalIgnoreCase).Where(g=>g.Count()>1))
             result.Errors.Add("本机重复加载相同模组ID，请先整理："+duplicate.Key);

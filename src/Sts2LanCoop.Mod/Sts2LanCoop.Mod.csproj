@@ -18,6 +18,6 @@
     <Reference Include="Steamworks.NET"><HintPath>$(GameDataDir)/Steamworks.NET.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <Target Name="CheckGameReferences" BeforeTargets="ResolveReferences">
-    <Error Condition="!Exists('$(GameDataDir)/sts2.dll')" Text="找不到游戏引用。请通过 -p:GameDir=游戏目录 或 Game.local.props 配置 v0.107.1 安装位置。" />
+    <Error Condition="!Exists('$(GameDataDir)/sts2.dll')" Text="找不到游戏引用。请通过 -p:GameDir=游戏目录 或 Game.local.props 配置已支持游戏的引用目录。" />
   </Target>
 </Project>

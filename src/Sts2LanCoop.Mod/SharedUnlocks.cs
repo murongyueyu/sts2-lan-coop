@@ -21,7 +21,7 @@ internal static class SharedUnlocks
     public static string Status {get;private set;}="共用解锁未开启。";
     public static string BackupRoot=>ProjectSettings.GlobalizePath("user://sts2_lan_coop/progress_backups");
     private static ProgressSaveManager Manager=>(ProgressSaveManager)AccessTools.Field(typeof(SaveManager),"_progressSaveManager").GetValue(SaveManager.Instance)!;
-    private static string Current=>ProgressSaveManager.GetProgressPathForProfile(SaveManager.Instance.CurrentProfileId);
+    private static string Current=>GameBuild.ProgressPath(SaveManager.Instance.CurrentProfileId);
     private static string Vanilla=>Path.Combine("profile"+SaveManager.Instance.CurrentProfileId,"saves","progress.save");
     private static ISaveStore Store(ProgressSaveManager manager)=>(ISaveStore)StoreField.GetValue(manager)!;
     private static string Full(ISaveStore store,string relative)=>ProjectSettings.GlobalizePath(store.GetFullPath(relative));
@@ -111,7 +111,8 @@ internal static class SharedUnlocks
     {
         if(_busy)return;
         if(!UserDataPathProvider.IsRunningModded)throw new InvalidOperationException("当前不是有模组的存档环境。");
-        if(SaveManager.Instance.GetLatestSchemaVersion<SerializableProgress>()!=UnlockProgress.Schema)throw new InvalidOperationException("当前游戏进度格式未适配。");
+        var schema=SaveManager.Instance.GetLatestSchemaVersion<SerializableProgress>();
+        if(!GameBuild.Supported||schema!=(GameBuild.Version=="v0.111.0"?24:21))throw new InvalidOperationException("当前游戏进度格式未适配。");
         using(var currentProcess=Process.GetCurrentProcess())
         {
             var peers=Process.GetProcessesByName(currentProcess.ProcessName);
@@ -127,7 +128,7 @@ internal static class SharedUnlocks
             var modBytes=File.ReadAllBytes(modPath);var mod=UnlockProgress.Read(modBytes);
             if(!import)
             {
-                var saved=manager.Progress.ToSerializable();saved.SchemaVersion=UnlockProgress.Schema;
+                var saved=manager.Progress.ToSerializable();saved.SchemaVersion=schema;
                 if(!JsonNode.DeepEquals(mod,JsonNode.Parse(JsonSerializationUtility.ToJson(saved))))
                     throw new IOException("本次原版进度保存尚未成功读回，未导出解锁。");
             }
@@ -169,7 +170,7 @@ internal static class SharedUnlocks
             Status="原版与模组版解锁进度已合并；对局、统计和成就保持各自独立。";
         }
         finally{_busy=false;}
-        SerializableProgress DefaultProgress(){var data=ProgressState.CreateDefault().ToSerializable();data.SchemaVersion=UnlockProgress.Schema;return data;}
+        SerializableProgress DefaultProgress(){var data=ProgressState.CreateDefault().ToSerializable();data.SchemaVersion=schema;return data;}
     }
 }
 

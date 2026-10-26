@@ -89,7 +89,7 @@ internal static class QuickReload
         var service = attempt?.Service as NetHostGameService ?? LanSession.HostedService ?? throw new InvalidOperationException("主机连接不存在。");
         var expected = attempt?.Expected ?? RunIds().ToHashSet();
         if (expected.Count is < 2 or > 4 || !expected.SetEquals(service.NetHost!.ConnectedPeerIds.Append(1UL)) ||
-            (RunManager.Instance.RunLobby != null && !expected.SetEquals(RunManager.Instance.RunLobby.ConnectedPlayerIds)))
+            (RunManager.Instance.RunLobby != null && !expected.SetEquals(GameBuild.Connected(RunManager.Instance.RunLobby))))
             throw new InvalidOperationException("人数未到齐：必须原开局人数全部在线，不能缺人快速SL。");
     }
     private static async Task StartHost()
@@ -226,9 +226,9 @@ internal static class QuickReload
             try { manager.CleanUp(); } finally { SuppressCleanupDisconnect = false; }
             attempt.Stop.Token.ThrowIfCancellationRequested();
             var state = RunState.FromSerializable(attempt.Save!);
-            lobby = new LoadRunLobby(attempt.Service, new ReloadListener(), attempt.Save!);
-            foreach (var id in attempt.Expected) lobby.ConnectedPlayerIds.Add(id);
-            NGame.Instance!.RemoteCursorContainer.Initialize(lobby.InputSynchronizer, lobby.ConnectedPlayerIds);
+            lobby = new LoadRunLobby(attempt.Service, GameBuild.ReloadListener(reason=>{if(_attempt is {} a)_=Fail(a,reason,a.Service is NetHostGameService);}), attempt.Save!);
+            GameBuild.AddReloadPlayers(lobby,attempt.Expected);
+            NGame.Instance!.RemoteCursorContainer.Initialize(lobby.InputSynchronizer,GameBuild.Connected(lobby));
             NGame.Instance.ReactionContainer.InitializeNetworking(attempt.Service);
             Reply(attempt, "armed"); await Signal(attempt, "setup");
             attempt.DropOldTraffic = false;
@@ -337,14 +337,5 @@ internal static class QuickReload
     private static async Task Frame()
     {
         var tree = (SceneTree)Engine.GetMainLoop(); await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
-    }
-    private sealed class ReloadListener : ILoadRunLobbyListener
-    {
-        public void PlayerConnected(ulong id) { }
-        public void RemotePlayerDisconnected(ulong id) { if (_attempt is { } a) _ = Fail(a, "重载时有玩家退出。", a.Service is NetHostGameService); }
-        public Task<bool> ShouldAllowRunToBegin() => Task.FromResult(false);
-        public void BeginRun() => throw new InvalidOperationException("快速SL由加载屏障启动。");
-        public void PlayerReadyChanged(ulong id) { }
-        public void LocalPlayerDisconnected(NetErrorInfo info) { if (_attempt is { } a) _ = Fail(a, "主机连接已断开。", false); }
     }
 }

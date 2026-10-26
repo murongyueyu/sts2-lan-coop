@@ -238,7 +238,7 @@ internal static class FixedResumeCount
     private static void Postfix(LoadRunLobby __instance, ref bool __result)
     {
         if (LanSession.Active)
-            __result &= __instance.ConnectedPlayerIds.SetEquals(__instance.Run.Players.Select(p => p.NetId));
+            __result &= GameBuild.Connected(__instance).SetEquals(__instance.Run.Players.Select(p => p.NetId));
     }
 }
 
@@ -249,7 +249,7 @@ internal static class FixedResumeConfirmation
     {
         if (!LanSession.Active) return true;
         var lobby = (LoadRunLobby)AccessTools.Field(typeof(NMultiplayerLoadGameScreen), "_runLobby").GetValue(__instance)!;
-        __result = Task.FromResult(lobby.ConnectedPlayerIds.SetEquals(lobby.Run.Players.Select(p => p.NetId)));
+        __result = Task.FromResult(GameBuild.Connected(lobby).SetEquals(lobby.Run.Players.Select(p => p.NetId)));
         return false;
     }
 }
@@ -268,6 +268,6 @@ internal static class ResumeWaitingText
             label.AddThemeFontSizeOverride("font_size", 24); __instance.AddChild(label);
             label.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft); label.Position = new Vector2(40, 20);
         }
-        label.Text = $"继续对局 · {lobby.ConnectedPlayerIds.Count}/{lobby.Run.Players.Count}人 · 人数到齐并全部准备后开始（主机角色固定）";
+        label.Text = $"继续对局 · {GameBuild.Connected(lobby).Count}/{lobby.Run.Players.Count}人 · 人数到齐并全部准备后开始（主机角色固定）";
     }
 }

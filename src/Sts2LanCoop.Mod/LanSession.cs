@@ -32,8 +32,8 @@ internal static class LanSession
         if (OS.GetName() != "Windows")
             return "此开发版仅在 Windows 提供连接入口。手机端先使用启动器内置 LAN；不要叠加网络补丁。";
         var version = MegaCrit.Sts2.Core.Debug.ReleaseInfoManager.Instance.ReleaseInfo?.Version;
-        if (version is not ("v0.107.1" or "0.107.1"))
-            return $"当前游戏版本 {version ?? "未知"}，此开发版仅支持 v0.107.1。";
+        if (!GameBuild.Supported)
+            return $"当前游戏版本 {version ?? "未知"}，此DLL支持v0.107.1和v0.111.0。";
         if (AppDomain.CurrentDomain.GetAssemblies().Any(a=>a.GetName().Name == "QuickSL"))
             return "本版已内置全员快速SL。请禁用外部QuickSL并重启，再建立LAN会话，避免两套重载同时执行。";
         var conflict = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a =>
@@ -73,7 +73,7 @@ internal static class LanSession
         Begin(1); // v0.107.1 ENetHost.NetId is natively fixed to 1.
         ResumeEntry = resume;
         var generation = _generation;
-        var host = new NetHostGameService();
+        var host = GameBuild.Host();
         try
         {
             var error = host.StartENetHost(Settings.HostPort, LanSettings.MaximumPlayers);
@@ -111,7 +111,7 @@ internal static class LanSession
         SaveLibrary.ImportWorking();
         Begin(Settings.PlayerId);
         var generation = _generation;
-        var flow = new JoinFlow();
+        var flow = GameBuild.Join();
         flow.CancelToken.CancelAfter(TimeSpan.FromSeconds(20));
         var transferred = false;
         try
@@ -135,17 +135,17 @@ internal static class LanSession
             if (result.sessionState == RunSessionState.InLobby && result.joinResponse.HasValue && !info.Resume)
             {
                 var screen = Stack(menu).GetSubmenuType<NCharacterSelectScreen>();
-                screen.InitializeMultiplayerAsClient(flow.NetService!, result.joinResponse.Value);
+                screen.InitializeMultiplayerAsClient(GameBuild.Service(flow)!, result.joinResponse.Value);
                 Stack(menu).Push(screen);
             }
             else if (result.sessionState == RunSessionState.InLoadedLobby && result.loadJoinResponse.HasValue && info.Resume)
             {
                 var screen = Stack(menu).GetSubmenuType<NMultiplayerLoadGameScreen>();
-                screen.InitializeAsClient(flow.NetService!, result.loadJoinResponse.Value);
+                screen.InitializeAsClient(GameBuild.Service(flow)!, result.loadJoinResponse.Value);
                 Stack(menu).Push(screen);
             }
             else throw new InvalidOperationException("房间状态已变化，请刷新后重新加入。");
-            flow.NetService!.Disconnected += _ => { if (_generation == generation) End(); };
+            GameBuild.Service(flow)!.Disconnected += _ => { if (_generation == generation) End(); };
             transferred = true;
             Settings.RememberSuccessfulConnection(endpoint);
             try { Save(); }
@@ -156,7 +156,7 @@ internal static class LanSession
         {
             if (!transferred)
             {
-                flow.NetService?.Disconnect(NetError.CancelledJoin, now: true);
+                GameBuild.Service(flow)?.Disconnect(NetError.CancelledJoin, now: true);
                 End();
             }
             flow.CancelToken.Dispose();

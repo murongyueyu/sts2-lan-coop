@@ -13,7 +13,7 @@ public static class UnlockProgress
     {
         if(bytes.Length is 0 or >16*1024*1024)throw new InvalidDataException("进度文件为空或过大，未同步。");
         var value=JsonNode.Parse(bytes) as JsonObject??throw new InvalidDataException("进度文件不是JSON对象。");
-        if(value["schema_version"]?.GetValue<int>()!=Schema)throw new InvalidDataException("共用解锁仅支持v0.107.1的schema 21；请先由对应游戏迁移存档。");
+        if(value["schema_version"]?.GetValue<int>() is not (21 or 24))throw new InvalidDataException("共用解锁支持schema 21/24；请先由对应游戏迁移存档。");
         return value;
     }
     public static UnlockMerge Merge(JsonObject vanilla,JsonObject modded,UnlockAllowlist allow)
@@ -54,7 +54,8 @@ public static class UnlockProgress
     }
     private static void Apply(JsonObject dest,JsonObject source,UnlockAllowlist allow)
     {
-        if(Number(dest,"schema_version",Schema)!=Schema||Number(source,"schema_version",Schema)!=Schema)throw new InvalidDataException("进度格式版本不兼容。");
+        var schema=Number(dest,"schema_version",24);
+        if(schema is not (21 or 24)||Number(source,"schema_version",24)!=schema)throw new InvalidDataException("两侧进度格式不同，请先在对应游戏中迁移；不跨版本合并。");
         var epochs=Records(dest,"epochs");var incoming=Records(source,"epochs");
         dest["epochs"]??=new JsonArray();
         foreach(var (id,epoch) in incoming.Where(p=>allow.Epochs.Contains(p.Key)))

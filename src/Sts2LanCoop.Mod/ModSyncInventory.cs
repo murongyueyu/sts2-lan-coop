@@ -20,7 +20,7 @@ internal static class ModSyncInventory
     {
         var mods = ModManager.Mods.Where(m=>m.manifest?.id!=null).Select(m=>new
         {
-            m.assembly, Data=new SyncMod
+            Assemblies=GameBuild.Assemblies(m).ToArray(), Data=new SyncMod
             {
                 Id=m.manifest!.id!, Name=m.manifest.name??m.manifest.id!,Version=m.manifest.version??"",
                 Gameplay=m.manifest.affectsGameplay, Loaded=m.state==ModLoadState.Loaded, Source=(int)m.modSource,
@@ -35,10 +35,10 @@ internal static class ModSyncInventory
             {
                 var files=ModSyncFiles.Scan(data.Directory);
                 if(data.Id==ModSyncRules.CoreId) files=files.Where(f=>f.Name==data.Id+".dll"||f.Name==data.Id+".json").ToList();
-                if(m.assembly!=null)
+                foreach(var assembly in m.Assemblies.Where(a=>!a.IsDynamic))
                 {
-                    using var stream=File.OpenRead(m.assembly.Location);using var pe=new PEReader(stream);var reader=pe.GetMetadataReader();
-                    if(reader.GetGuid(reader.GetModuleDefinition().Mvid)!=m.assembly.ManifestModule.ModuleVersionId)
+                    using var stream=File.OpenRead(assembly.Location);using var pe=new PEReader(stream);var reader=pe.GetMetadataReader();
+                    if(reader.GetGuid(reader.GetModuleDefinition().Mvid)!=assembly.ManifestModule.ModuleVersionId)
                         throw new IOException("已加载 DLL 与磁盘版本不同，请重启游戏。");
                 }
                 var fingerprint=ModSyncRules.Fingerprint(files);
@@ -72,7 +72,7 @@ internal static class ModSyncInventory
         if(_startup!=null)await _startup;
         var mods=(await Read()).Where(m=>m.Loaded).ToList();
         foreach(var mod in mods.Where(m=>m.Unavailable.Length>0))throw new IOException(mod.Name+"："+mod.Unavailable);
-        var profile=new SyncProfile{Session=AdmissionTransport.Session,Mods=mods};var required=ModSyncRules.Required(profile);
+        var profile=new SyncProfile{Game=GameBuild.Version,Session=AdmissionTransport.Session,Mods=mods};var required=ModSyncRules.Required(profile);
         var published=new List<SyncMod>();
         foreach(var mod in mods)
         {

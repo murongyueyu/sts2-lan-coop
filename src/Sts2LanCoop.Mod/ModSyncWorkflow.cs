@@ -19,7 +19,7 @@ internal static class ModSyncWorkflow
         using var client=new ModSyncTransport.Client(parent.GetTree(),endpoint);
         var profile=await client.Profile(cancel);
         var local=await ModSyncInventory.Read();cancel.ThrowIfCancellationRequested();
-        var comparison=ModSyncRules.Compare(profile,local);
+        var comparison=ModSyncRules.Compare(profile,local,GameBuild.Version);
         if(comparison.Errors.Count>0)throw new InvalidOperationException(string.Join("\n",comparison.Errors));
         if(comparison.Matches){progress("模组与主机一致，兼容的个人美化已保留。");return true;}
         var changes=string.Join("\n",comparison.Changes.Select(c=>$"{ActionName(c.Action)} {c.Name} [{c.Id}] {c.Target?.Version??c.Local?.Version}：{c.Reason}"));
@@ -153,7 +153,7 @@ internal static class ModSyncWorkflow
             {
                 var plan=JsonSerializer.Deserialize<SyncApplyPlan>(File.ReadAllBytes(file))!;
                 var profile=JsonSerializer.Deserialize<SyncProfile>(File.ReadAllBytes(Path.Combine(plan.Storage,"transactions",plan.Id,"profile.json")))!;
-                var comparison=ModSyncRules.Compare(profile,await ModSyncInventory.Read());
+                var comparison=ModSyncRules.Compare(profile,await ModSyncInventory.Read(),GameBuild.Version);
                 address(plan.Endpoint);
                 if(!comparison.Matches){status("重启后模组尚未对齐，请检查应用日志；未自动入房。");return;}
                 status("重启后实际加载已复核。地址已填入；点击连接重新检查房间，继续存档时重新选择角色。");
