@@ -1,4 +1,4 @@
-# STS2 LAN Co-op
+# STS2 LAN Co-op · 局域网四人联机（正版 / 离线 / 安卓）
 
 面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
 
@@ -7,7 +7,7 @@
 ![game](https://img.shields.io/badge/game-v0.107.1%20%7C%20v0.111.0-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**, adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, host mod synchronization with exact-version packages, and optional shared unlock progress. All players in a room must still run the same game version. Android guests are supported. GPL-3.0.
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**, adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, host mod synchronization with exact-version packages, and optional shared unlock progress. All players in a room must still run the same game version. Works with Steam and offline (non-Steam) builds; Android guests are supported. GPL-3.0.
 
 ## 安装（下载即用）
 
@@ -64,6 +64,7 @@
 - 单 DLL 双版本：同一份 DLL 在 v0.107.1 与 v0.111.0 上加载，运行时探测接口差异；**两个版本之间不能互联**，命名存档记录来源游戏版本，不跨版本强载载荷。
 - **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透与完整一局的跨设备、跨网络验收仍在进行；Android 客机联机已支持。
 - **现已支持 Android（Sts2MobileLauncher）客机联机**：手机可查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较、下载主机模组包后手动导入；手机端需同游戏版本与同 Mod 版本。手机建房、共用解锁与模组自动应用仍仅 Windows。
+- 不依赖 Steam 联机服务：正版 Steam、离线/非 Steam 构建与 Android 客机都可尝试；离线构建未逐版本验收，本 Mod 不含破解或绕过 DRM 内容。
 - 快速 SL 的效果参照手动保存退出再继续：未持久化的操作可以重做，但不保证所有选项重置，也不保证随机结果改变。
 
 暂不支持：游戏中途加入、人数变化、房主迁移、密码房、自动搜房、自动重连、跨版本互通、独立服务器。
