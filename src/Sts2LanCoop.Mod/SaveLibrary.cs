@@ -24,6 +24,7 @@ internal static class SaveLibrary
     private static RunEntry? _reloadPin;
     private static (RunEntry Summary, byte[] Bytes)? _reloadWrite;
     public static long ArchiveGeneration { get; private set; }
+    private static bool _ended;
     public static void HoldForReload(RunEntry entry)
     {
         if (_reloadPin != null || ActiveEntry?.Revision != entry.Revision) throw new InvalidOperationException("保存点已变化，请重新发起SL。");
@@ -64,6 +65,7 @@ internal static class SaveLibrary
         CheckIdleWrites();
         ImportWorking();
         _newId = Guid.NewGuid().ToString("N");
+        _ended = false; ArchiveGeneration++;
         _newName = RunCatalog.ValidateName(string.IsNullOrWhiteSpace(name) ? $"多人冒险 {DateTime.Now:MM-dd HH:mm}" : name);
         ActiveEntry = null; LastError = null;
     }
@@ -81,6 +83,7 @@ internal static class SaveLibrary
         if (run.Players.Count != entry.PlayerCount || !run.Players.Select(p => p.NetId).Order().SequenceEqual(entry.Slots.Select(s => s.NativeId).Order()))
             throw new InvalidDataException("存档索引与实际角色不一致，未加载。");
         ActiveEntry = entry; _newId = null; LastError = null;
+        _ended = false; ArchiveGeneration++;
     }
     private static void CheckIdleWrites()
     {
@@ -98,10 +101,14 @@ internal static class SaveLibrary
         if (!File.Exists(path)) return null;
         var bytes = File.ReadAllBytes(path);
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
-        var known = Catalog.List().FirstOrDefault(e => e.PayloadHash == hash);
+        var known = Catalog.Inspect().Select(i => i.Entry).FirstOrDefault(e => e?.PayloadHash == hash);
         if (known != null) return known;
         var run = Decode(bytes);
+        if (run.PlatformType != PlatformType.None) return null; // Native Steam is owned by the working-slot bridge.
         ValidateRun(run);
+        if (Catalog.IsRetired("", RunStorage.Key(run), hash)) return null;
+        var older = Catalog.Inspect().FirstOrDefault(i => i.Entry?.SourceKey == RunStorage.Key(run))?.Entry;
+        if (older != null) return older;
         return Catalog.Commit(Summarize(run) with { Name = $"导入的多人冒险 {DateTime.Now:MM-dd HH:mm}",
             Owner = LanSession.Settings.PlayerId }, bytes);
     }
@@ -112,8 +119,9 @@ internal static class SaveLibrary
             run.Players.Count(p => p.NetId == 1) != 1)
             throw new InvalidDataException("仅支持主机ID为1的普通LAN多人存档；已保留原文件。");
     }
-    private static RunEntry Summarize(SerializableRun run) => new()
+    internal static RunEntry Summarize(SerializableRun run) => new()
     {
+        SourceKey = RunStorage.Key(run), GameMode = run.GameMode.ToString(),
         GameVersion=GameBuild.Version,
         PlayerCount = run.Players.Count, Act = run.CurrentActIndex + 1,
         Floor = run.VisitedMapCoords.Count,
@@ -143,8 +151,10 @@ internal static class SaveLibrary
     }
     public static void Capture(SerializableRun written)
     {
+        if (_ended) return;
         ValidateRun(written);
         var bytes = File.ReadAllBytes(WorkingPath);
+        RunStorage.Lease.Observe(bytes);
         var reread = Decode(bytes);
         if (reread.StartTime != written.StartTime || !reread.Players.Select(p => p.NetId).Order().SequenceEqual(written.Players.Select(p => p.NetId).Order()))
             throw new InvalidDataException("原版写入读回与当前对局不一致，未提交存档库。");
@@ -158,6 +168,7 @@ internal static class SaveLibrary
             Owner = current?.Owner ?? LanSession.Settings.PlayerId
         }, bytes);
         _newId = null; LastError = null;
+        Catalog.Prune(ActiveEntry);
     }
     public static void Rename(string id, string name)
     {
@@ -172,22 +183,49 @@ internal static class SaveLibrary
         _ = Catalog.ReadPayload(ActiveEntry);
     }
     public static void Failed(Exception ex) => LastError = ex;
+    public static void Ended() { _ended = true; ActiveEntry = null; _newId = null; ArchiveGeneration++; }
+    public static void Delete(string id, string? revision)
+    {
+        RunStorage.RequireIdle(); Catalog.Retire(id, revision, "deleted");
+        RunStorage.RemoveWorking(Catalog, WorkingPath);
+        if (ActiveEntry?.Id == id) ActiveEntry = null;
+        ArchiveGeneration++;
+    }
 }
 
 [HarmonyPatch(typeof(RunSaveManager), nameof(RunSaveManager.SaveRun), [typeof(SerializableRun), typeof(bool)])]
 internal static class ArchiveNativeSavePatch
 {
+    private static void Prefix(SerializableRun save, bool isMultiplayer) => RunStorage.TrackNativeSave(save, isMultiplayer);
+    // Wrap the completed extension chain, so the archive includes append-only save metadata.
+    [HarmonyPriority(Priority.Last)]
     private static void Postfix(SerializableRun save, bool isMultiplayer, ref Task __result)
     {
         if (isMultiplayer && LanSession.Active && LanSession.HostedService != null)
-            __result = Capture(__result, save, SaveLibrary.ArchiveGeneration);
+            __result = Capture(__result, save, SaveLibrary.ArchiveGeneration, RunStorage.Scope);
+        else if (!isMultiplayer && save.Players.Count == 1 && save.GameMode == GameMode.Standard)
+            __result = CaptureSolo(__result, save, SoloLibrary.Generation, RunStorage.Scope);
     }
-    private static async Task Capture(Task original, SerializableRun save, long generation)
+    private static async Task CaptureSolo(Task original, SerializableRun save, long generation, string scope)
     {
         try
         {
             await original;
-            if (generation != SaveLibrary.ArchiveGeneration) { GD.PushWarning("[STS2 LAN Co-op] 忽略已结束重载代次的迟到归档。"); return; }
+            if (scope != RunStorage.Scope) return;
+            if (generation != SoloLibrary.Generation)
+            { RunStorage.RemoveWorking(SoloLibrary.Catalog, SoloLibrary.WorkingPath); return; }
+            SoloLibrary.Capture(save);
+        }
+        catch (Exception ex) { SoloLibrary.Failed(ex); GD.PushError("[STS2 LAN Co-op] 单人归档失败：" + ex); throw; }
+    }
+    private static async Task Capture(Task original, SerializableRun save, long generation, string scope)
+    {
+        try
+        {
+            await original;
+            if (scope != RunStorage.Scope) return;
+            if (generation != SaveLibrary.ArchiveGeneration)
+            { RunStorage.RemoveWorking(SaveLibrary.Catalog, SaveLibrary.WorkingPath); GD.PushWarning("[STS2 LAN Co-op] 忽略已结束重载代次的迟到归档。"); return; }
             SaveLibrary.Capture(save);
         }
         catch (Exception ex) { SaveLibrary.Failed(ex); GD.PushError($"[STS2 LAN Co-op] 保存归档失败：{ex}"); throw; }
@@ -200,10 +238,22 @@ internal static class SaveExitGuard
     private static bool _busy;
     private static bool Prefix(NPauseMenu __instance)
     {
-        if (QuickReload.Busy) return false;
+        if (QuickReload.Busy || SoloLibrary.Busy) return false;
+        if (RunStorage.Solo && RunManager.Instance.DebugOnlyGetState()?.GameMode == GameMode.Standard)
+        {
+            if (!_busy) _ = GuardSolo(__instance);
+            return false;
+        }
         if (!LanSession.Active || LanSession.HostedService == null) return true;
         if (!_busy) _ = Guard(__instance);
         return false;
+    }
+    private static async Task GuardSolo(NPauseMenu menu)
+    {
+        _busy = true;
+        try { await SoloLibrary.EnsureSaved(); await NGameReturn(); }
+        catch (Exception ex) { NativeUi.Notice(menu, "保存并退出未完成", ex.Message); }
+        finally { _busy = false; }
     }
     private static async Task Guard(NPauseMenu menu)
     {

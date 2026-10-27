@@ -3,11 +3,11 @@
 面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
 
 ![license](https://img.shields.io/badge/license-GPL--3.0-blue)
-![version](https://img.shields.io/badge/version-0.7.0--alpha.8-orange)
+![version](https://img.shields.io/badge/version-0.8.0--alpha.3-orange)
 ![game](https://img.shields.io/badge/game-v0.107.1%20%7C%20v0.111.0-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**, adding an in-game 4-player room panel, named multiplayer saves, guest role takeover, synchronized quick-save-reload, host mod synchronization with exact-version packages, and optional shared unlock progress. All players in a room must still run the same game version. Works with Steam and offline (non-Steam) builds; Android guests are supported. GPL-3.0.
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**. Native-style Steam/LAN menus, 4-player rooms, named multiplayer saves, saved-role takeover cards, pause-menu quick reload, solo reload and multi-save library, host mod synchronization, optional shared unlocks, and explicit working-save conflict recovery. All players in a room must run the same game and mod versions. Steam, offline (non-Steam) builds and Android guests are supported. GPL-3.0.
 
 ## 安装（下载即用）
 
@@ -48,17 +48,31 @@
 | 玩模组版时原版解锁进度不生效 | **共用解锁**（可选、默认关闭）：加载模组进度时合并原版解锁，保存时导出新增解锁；对局、战绩与成就记录仍然各自独立 |
 | 不知道队友是谁 | 昵称随会话同步，显示当前实际操作者 |
 | 游戏更新后旧 Mod 失效 | **同一份 DLL 同时支持 v0.107.1 与 v0.111.0**，不用为两个游戏版本准备两份安装包；但同一房间内仍须使用相同游戏版本 |
+| 想要原版风格的联机入口 | **Steam 联机 / 局域网 · 直连**并列页签；LAN 页提供创建房间、加入房间、继续对局与联机设置 |
+| 旧存档客机角色不好接 | 独立**角色接管卡片页**：主机锁定、已占用禁选、金色选中与卡组/遗物摘要，确认前复查并由主机最终预留 |
+| 单人也要快速SL和多存档 | 单人普通冒险独立**快速SL**、**单人多存档**与按局删除；每日/自定义模式保持原版 |
+| 保存后工作档报冲突 | 扩展追加写入不再误报；冲突时「处理工作档冲突」**先完整备份主档、backup 与租约，再恢复**，未知数据只留备份 |
 | 改 Mod 就绕开校验 | 保留原版版本、玩法 Mod 与模型哈希检查，不静默忽略差异 |
 
 ## 截图
 
-![四人大厅](images/四人大厅.png)
+![局域网 / 直连菜单](images/lan-menu.png)
 
-![连接面板](images/连接面板.png)
+![旧存档角色接管卡片](images/role-takeover.png)
+
+![多人存档详情](images/save-details.png)
+
+![暂停菜单快速SL](images/quick-sl.png)
+
+![单人多存档](images/solo-saves.png)
+
+![工作档冲突恢复确认](images/conflict-recovery.png)
 
 ## 当前状态
 
 **alpha 开发版；Android 客机联机已支持并开放，跨网络整局与不同启动器版本仍以实际反馈为准。**
+
+- **0.8.0-alpha.3**：原版风格 Steam/LAN 并列菜单、旧存档角色接管卡片、暂停菜单快速SL、单人快速SL与单人多存档、按局删除和终局清理；本版修复扩展保存后的工作档误报，新增显式确认的冲突恢复。核心77项、JMC/Ritsu 两进程78项、渲染UI27项通过，双版本 API 各173引用0缺失。
 
 - 已在本机以真实引擎 + 四个独立游戏进程验证到首个 MapRoom，并覆盖满员拒绝、端口占用、取消、准备同步、存档与快速 SL。
 - 主机模组同步已实现同端口版本包传输、完整文件校验、进度/取消/断点缓存、退出后事务式应用与恢复；**自动应用为 Windows 专用**，Android 客机可比较、下载主机包到本机缓存，退出后用启动器手动导入。

@@ -24,6 +24,8 @@ public sealed record AdmissionMessage
     public bool Resume { get; init; }
     public bool Running { get; init; }
     public int Count { get; init; }
+    public int Act { get; init; }
+    public int Floor { get; init; }
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public ulong Person { get; init; }
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
@@ -48,7 +50,7 @@ public static class AdmissionWire
     {
         if (!IsControl(data) || data.Length > 512 * 1024 + 4) throw new InvalidDataException("无效的联机控制报文。");
         var message = JsonSerializer.Deserialize<AdmissionMessage>(data.AsSpan(4)) ?? throw new InvalidDataException("控制报文为空。");
-        if (message.Protocol != 5) throw new InvalidDataException("联机协议版本不同，请所有玩家统一安装0.7.0-alpha.8或更新的同版Mod。");
+        if (message.Protocol != 5) throw new InvalidDataException("联机协议版本不同，请所有玩家统一安装0.8.0-alpha.3或更新的同版Mod。");
         return message;
     }
 }

@@ -18,7 +18,7 @@ public static class Plugin
             ((SceneTree)Engine.GetMainLoop()).Root.CallDeferred(Node.MethodName.AddChild, new LanMobileLifecycle { Name = "LanMobileLifecycle" });
             ((SceneTree)Engine.GetMainLoop()).ProcessFrame += QuickReload.Tick;
             // 平台日志供期0真机核查OS.GetName()/OS.GetVersion()的实际返回值。
-            GD.Print($"[STS2 LAN Co-op] 0.7.0-alpha.8 loaded on {LanCapability.Platform} {OS.GetVersion()}; one DLL supports v0.107.1 / v0.111.0; admission 5, SL 2, mod sync 2.");
+            GD.Print($"[STS2 LAN Co-op] 0.8.0-alpha.3 loaded on {LanCapability.Platform} {OS.GetVersion()}; one DLL supports v0.107.1 / v0.111.0; admission 5, SL 2, mod sync 2.");
             GD.Print($"[STS2 LAN Co-op] capabilities: join={Allowed(LanCapability.JoinBlockReason)}, host={Allowed(LanCapability.HostBlockReason)}, SL={Allowed(LanCapability.QuickReloadBlockReason)}, mod packages={LanCapability.CanInspectMods}, auto apply={Allowed(LanCapability.ModSyncBlockReason)}.");
         }
         catch
@@ -35,17 +35,7 @@ internal static class MultiplayerMenuPatch
 {
     private static void Postfix(NMultiplayerSubmenu __instance)
     {
-        ModSyncInventory.CaptureStartup();
-        if (__instance.HasNode("LanCoopEntry")) return;
-        var button = new Button { Name = "LanCoopEntry", Text = "局域网 / 直连 · 4人", ZIndex = 20 };
-        __instance.AddChild(button);
-        button.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopRight);
-        button.OffsetLeft = -370;
-        button.OffsetRight = -30;
-        button.OffsetTop = 30;
-        button.OffsetBottom = 90;
-        button.AddThemeFontSizeOverride("font_size", 26);
-        button.Pressed += () => LanPanel.Open(__instance);
+        MultiplayerUi.Attach(__instance);
     }
 }
 

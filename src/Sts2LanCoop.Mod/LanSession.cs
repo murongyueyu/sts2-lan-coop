@@ -62,6 +62,7 @@ internal static class LanSession
         RitsuNetworkInterop.Ensure();
         Settings.Validate();
         Save();
+        RunStorage.AcquireLanSlot();
         LocalId = id;
         Active = true;
         _generation++;
@@ -91,12 +92,14 @@ internal static class LanSession
                 var screen = Stack(menu).GetSubmenuType<NCharacterSelectScreen>();
                 screen.InitializeMultiplayerAsHost(host, LanSettings.MaximumPlayers);
                 Stack(menu).Push(screen);
+                InvitePanel.Show(screen, host, Settings);
             }
             else
             {
                 var screen = Stack(menu).GetSubmenuType<NMultiplayerLoadGameScreen>();
                 screen.InitializeAsHost(host, run);
                 Stack(menu).Push(screen);
+                InvitePanel.Show(screen, host, Settings);
             }
             return host;
         }
@@ -179,5 +182,6 @@ internal static class LanSession
         HostedService = null;
         ResumeEntry = null;
         AdmissionTransport.Reset();
+        _ = RunStorage.ReleaseLanSlot();
     }
 }

@@ -17,6 +17,7 @@ public sealed class LanSettings
     public string ExternalEndpoint { get; set; } = "";
     public string QuickReloadHotkey { get; set; } = "Ctrl+F8";
     public bool ShareMods { get; set; }
+    public bool? PreferLanMenu { get; set; }
     public bool ShareUnlockProgress { get; set; }
     public List<string> RecentConnections { get; set; } = [];
 

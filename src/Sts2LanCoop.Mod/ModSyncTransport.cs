@@ -118,7 +118,7 @@ internal static class ModSyncTransport
             {
                 var ev=data!.Value;
                 if(ev.type==ENetConnection.EventType.Connect)_connected=true;
-                if(ev.type==ENetConnection.EventType.Disconnect)throw new IOException("房主断开了同步连接，请确认双方使用0.7.0-alpha.8或更新的同版Mod。");
+                if(ev.type==ENetConnection.EventType.Disconnect)throw new IOException("房主断开了同步连接，请确认双方使用0.8.0-alpha.3或更新的同版Mod。");
                 if(ev.type==ENetConnection.EventType.Receive)
                 {
                     var response=Decode(ev.packetData);

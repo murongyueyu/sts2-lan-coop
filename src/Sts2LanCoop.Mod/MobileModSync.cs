@@ -102,7 +102,7 @@ internal static class MobileModSync
         }).ToArray();
         File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
         {
-            Version = "0.7.0-alpha.8", HostRevision = host.Revision, comparison.Matches,
+            Version = "0.8.0-alpha.3", HostRevision = host.Revision, comparison.Matches,
             comparison.Errors, comparison.Changes, Mods = entries
         }, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print("[STS2 LAN Co-op] Android mod comparison: " + (comparison.Matches ? "matched" : "different") + "; report=" + path);

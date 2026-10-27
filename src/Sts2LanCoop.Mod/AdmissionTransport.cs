@@ -67,6 +67,7 @@ internal static class AdmissionTransport
         Revision = LanSession.ResumeEntry?.Revision ?? "", Name = LanSession.ResumeEntry?.Name ?? "新的多人冒险",
         Running = RunManager.Instance.IsInProgress,
         Count = LanSession.ResumeEntry?.PlayerCount ?? 4, Slots = LanSession.ResumeEntry?.Slots ?? [],
+        Act = LanSession.ResumeEntry?.Act ?? 0, Floor = LanSession.ResumeEntry?.Floor ?? 0,
         Occupied = (LanSession.HostedService?.NetHost?.ConnectedPeerIds ?? []).Concat(_reservations.ReservedSlots)
             .Append(1UL).Select(id => id.ToString()).Distinct().ToList(), Names = new(Names)
     };

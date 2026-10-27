@@ -8,10 +8,13 @@ using Sts2LanCoop.Core;
 namespace Sts2LanCoop.Mod;
 
 // Native Godot controls/signals; session and transport work is delegated to LanSession.
+internal enum LanPage { Create, Join, Settings }
+
 internal sealed class LanPanel
 {
     private readonly NMultiplayerSubmenu _menu;
-    private readonly CanvasLayer _layer;
+    private readonly NativePage _layer;
+    private VBoxContainer _target = null!;
     private readonly VBoxContainer _body;
     private readonly Label _status;
     private readonly LineEdit _name;
@@ -20,34 +23,32 @@ internal sealed class LanPanel
     private readonly LineEdit _runName;
     private readonly LineEdit _reloadKey;
     private readonly CheckButton _shareMods;
-    private readonly VBoxContainer _saves;
     private readonly VBoxContainer _slots;
     private AdmissionMessage? _inspected;
     private Endpoint? _inspectedEndpoint;
-    private ulong? _chosenSlot;
     private CancellationTokenSource? _requestCancel;
-    private readonly Button _host;
-    private readonly Button _join;
-    private readonly Button _sync;
-    private readonly Button _restore;
-    private readonly Button? _organizeWorkshop;
-    private readonly Button? _restoreWorkshop;
-    private readonly Button _unlock;
-    private readonly Button _close;
+    private readonly UiAction _host;
+    private readonly UiAction _join;
+    private readonly UiAction _sync;
+    private readonly UiAction _restore;
+    private readonly UiAction? _organizeWorkshop;
+    private readonly UiAction? _restoreWorkshop;
+    private readonly UiAction _unlock;
+    private readonly UiAction _close;
     private readonly string? _hostBlock;
     private readonly string? _joinBlock;
     private JoinFlow? _flow;
     private bool _busy;
     private bool _disposed;
 
-    public static void Open(NMultiplayerSubmenu menu)
+    public static void Open(NMultiplayerSubmenu menu, LanPage page = LanPage.Create)
     {
         if (menu.HasNode("LanCoopPanel")) return;
-        try { _ = new LanPanel(menu); }
+        try { _ = new LanPanel(menu, page); }
         catch (Exception ex)
         {
             GD.PushError($"[STS2 LAN Co-op] 无法打开面板：{ex}");
-            menu.GetNodeOrNull<CanvasLayer>("LanCoopPanel")?.QueueFree();
+            menu.GetNodeOrNull<NativePage>("LanCoopPanel")?.QueueFree();
             var dialog = new AcceptDialog { Title = "LAN 面板无法打开", DialogText = ex.Message };
             menu.AddChild(dialog);
             dialog.Confirmed += dialog.QueueFree;
@@ -56,110 +57,75 @@ internal sealed class LanPanel
         }
     }
 
-    private LanPanel(NMultiplayerSubmenu menu)
+    private LanPanel(NMultiplayerSubmenu menu, LanPage page)
     {
-        // Load before creating UI: malformed config is preserved and logged, never regenerated silently.
         var settings = LanSession.Settings;
         _menu = menu;
-        // 期1能力矩阵：客机与主机分别判定，Android只在客机侧放开。
-        _hostBlock = LanSession.GetHostBlockReason();
-        _joinBlock = LanSession.GetJoinBlockReason();
-        _layer = new CanvasLayer { Name = "LanCoopPanel", Layer = 100 };
-        menu.AddChild(_layer);
-        var backdrop = new ColorRect { Color = new Color(0, 0, 0, 0.85f) };
-        _layer.AddChild(backdrop);
-        backdrop.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        var panel = new PanelContainer();
-        backdrop.AddChild(panel);
-        panel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        panel.OffsetLeft = 70; panel.OffsetRight = -70;
-        panel.OffsetTop = 45; panel.OffsetBottom = -45;
-        var margin = new MarginContainer();
-        foreach (var side in new[] { "left", "right", "top", "bottom" }) margin.AddThemeConstantOverride($"margin_{side}", 24);
-        panel.AddChild(margin);
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
-        margin.AddChild(scroll);
-        _body = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _body.AddThemeConstantOverride("separation", 14);
-        scroll.AddChild(_body);
-        Text("局域网 / 地址直连 · 最多4人", 32);
-        Text($"{GameBuild.Version} · 新建或继续多人冒险 · 继续时人数固定，主机角色固定", 20);
-        _name = Input("当前昵称（所有玩家可见，跟随本次加入的人）", settings.PlayerName);
-        _port = Input("房主 UDP 监听端口", settings.HostPort.ToString());
-        _shareMods = new CheckButton {Text="允许向加入者分享本房间所需模组（请确认有权分享；不含游戏、存档和账号）",ButtonPressed=settings.ShareMods};
-        _body.AddChild(_shareMods);
-        _runName = Input("新对局名称", $"多人冒险 {DateTime.Now:MM-dd HH:mm}");
-        _host = Button("创建四人房间", Host);
-        if (_hostBlock != null) { _host.Disabled = _shareMods.Disabled = true; Text("建房不可用：" + _hostBlock, 20); }
-        Text("继续多人对局", 26);
-        Text("选择存档后，等待相同人数到齐。客机可以由其他朋友接替。", 20);
-        _saves = new VBoxContainer(); _body.AddChild(_saves);
-        Button("刷新存档列表", RefreshSaves);
-        Text("加入房间", 26);
+        _hostBlock = LanSession.GetHostBlockReason(); _joinBlock = LanSession.GetJoinBlockReason();
+        _layer = new NativePage { Name = "LanCoopPanel", Heading = page switch
+        { LanPage.Create => "创建房间", LanPage.Join => "加入房间", _ => "联机设置" } };
+        menu.AddChild(_layer); _body = _layer.Body;
+        _layer.CloseRequested = CloseOrCancel;
+        _target = _body;
+        _name = Input("玩家昵称", settings.PlayerName);
+        VBoxContainer Section(LanPage kind)
+        {
+            var group = new VBoxContainer { Visible = page == kind };
+            group.AddThemeConstantOverride("separation", 12); _body.AddChild(group); _target = group; return group;
+        }
+        Section(LanPage.Create);
+        Text("创建含房主最多4人的联机房间。", 24);
+        _runName = Input("对局名称", $"多人冒险 {DateTime.Now:MM-dd HH:mm}");
+        _port = Input("UDP 监听端口", settings.HostPort.ToString());
+        _shareMods = new CheckButton { Text = "允许分享本房间所需模组", ButtonPressed = settings.ShareMods };
+        _shareMods.AddThemeFontSizeOverride("font_size", 24);
+        _shareMods.AddThemeColorOverride("font_color", new Color("382410"));
+        _target.AddChild(_shareMods);
+        Text("创建后，在大厅选择角色并等待朋友加入。", 22);
+        _host = Button("创建房间", Host); _host.Disabled = _hostBlock != null;
+        if (_hostBlock != null) Text(_hostBlock, 20);
+        Section(LanPage.Join);
         _address = Input("房主 IP / 域名:端口", settings.RecentConnections.FirstOrDefault() ?? "");
-        _address.PlaceholderText = "例如 room.example.com:45678";
-        Button("查看房间 / 刷新可选角色", () => _ = Inspect());
-        _sync = Button(LanCapability.Android ? "检查 / 下载主机模组（手动导入）" : "检查 / 同步主机模组", () => _ = SyncMods());
-        _restore = Button("恢复最近一次同步前的模组配置", () => _ = RestoreMods());
-        if (LanCapability.ModSyncBlockReason is { } syncBlock)
-        {
-            _sync.Disabled = !LanCapability.CanInspectMods; _restore.Disabled = true;
-            Text("自动应用不可用：" + syncBlock, 20);
-            if (LanCapability.Android) Text("可检查差异并下载主机包；下载不代表Android兼容，也不会自动安装或调整启用状态。", 20);
-        }
-        Text("仅要求玩法模组及其依赖一致；独立美化和辅助前置可保留各自配置。", 20);
-        if (LanCapability.Windows)
-        {
-            _organizeWorkshop = Button("整理 Steam 工坊原目录（退出后执行）", () => _ = OrganizeWorkshop());
-            _restoreWorkshop = Button("恢复最近一次工坊目录整理", () => _ = OrganizeWorkshop(restore: true));
-        }
-        _slots = new VBoxContainer(); _body.AddChild(_slots);
-        _join = Button("连接", () => _ = Join());
-        if (_joinBlock != null) _join.Disabled = true;
+        _address.PlaceholderText = "192.168.1.8:33771";
+        Button("查看房间", () => _ = Inspect());
+        _sync = Button(LanCapability.Android ? "下载主机模组" : "检查 / 同步模组", () => _ = SyncMods());
+        _sync.Disabled = !LanCapability.CanInspectMods;
+        _slots = new VBoxContainer(); _target.AddChild(_slots);
+        _join = Button("连接房间", () => _ = Join()); _join.Disabled = _joinBlock != null;
         _address.TextSubmitted += text => { if (!_busy && _joinBlock == null) _ = Join(); };
         foreach (var recent in settings.RecentConnections)
-            Button($"最近连接：{recent}", () => { if (!_busy) _address.Text = recent; });
-        _status = Text(LanCapability.Windows
-            ? "Radmin：填写房主虚拟 IP；樱花：填写节点域名和外部 UDP 端口。"
-            : "手机端本期只开放客机加入：填写房主虚拟 IP，或樱花节点域名和外部端口后点击连接。", 20);
-        if (_joinBlock != null) _status.Text = _joinBlock;
-        _unlock = Button("共用原版 / 模组解锁（进行中的对局分开）",()=>{if(!_busy)SharedUnlocks.Configure(_menu,text=>{if(!_disposed)_status.Text=text;});});
-        if (LanCapability.SharedUnlockBlockReason is { } unlockBlock) { _unlock.Disabled = true; Text("共用解锁不可用：" + unlockBlock, 20); }
-        _reloadKey = Input("快速SL快捷键（例如Ctrl+F8；off关闭；换角色需保存退出后重新入房）", settings.QuickReloadHotkey);
-        if (LanCapability.QuickReloadBlockReason is { } reloadBlock) Text("快速SL不可用：" + reloadBlock, 20);
-        Button("保存联机和快捷键设置", () => { if (!_busy) { try { ApplySettings(); _status.Text = "设置已保存。"; } catch (Exception ex) { _status.Text = ex.Message; } } });
-        _close = Button("关闭", CloseOrCancel);
+            Button(recent, () => { if (!_busy) { _address.Text = recent; _inspected = null; } });
+        if (LanCapability.Android) Text("下载后须退出游戏，通过启动器手动导入兼容包并重启。", 20);
+        Text("仅要求玩法模组及其依赖一致，美化模组可保留各自配置。", 20);
+        Section(LanPage.Settings);
+        _restore = Button("恢复同步前的模组配置", () => _ = RestoreMods());
+        _restore.Disabled = LanCapability.ModSyncBlockReason != null;
+        if (LanCapability.Windows)
+        {
+            _organizeWorkshop = Button("整理 Steam 工坊原目录", () => _ = OrganizeWorkshop());
+            _restoreWorkshop = Button("恢复工坊目录整理", () => _ = OrganizeWorkshop(true));
+        }
+        _unlock = Button("共用原版 / 模组解锁", () => { if (!_busy) SharedUnlocks.Configure(_menu, text => { if (!_disposed) _status!.Text = text; }); });
+        _unlock.Disabled = LanCapability.SharedUnlockBlockReason != null;
+        _reloadKey = Input("快速SL快捷键（off关闭）", settings.QuickReloadHotkey);
+        Button("保存设置", () => { try { ApplySettings(); _status!.Text = "设置已保存。"; } catch (Exception ex) { _status!.Text = ex.Message; } });
+        _target = _body;
+        _status = Text(page == LanPage.Join ? "填写局域网、虚拟组网地址或外部UDP隧道地址。" : "", 22);
+        _close = new UiAction(_layer.Footer, "返回", CloseOrCancel);
         _layer.TreeExiting += () => { _disposed = true; _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); };
-        RefreshSaves();
-        ModSyncWorkflow.ShowPending(_menu, value => _address.Text=value, value => {if(!_disposed)_status.Text=value;});
-        WorkshopOrganizationWorkflow.ShowLastResult(value => {if(!_disposed)_status.Text=value;});
+        ModSyncWorkflow.ShowPending(_menu, value => _address.Text = value, value => { if (!_disposed) _status!.Text = value; });
+        WorkshopOrganizationWorkflow.ShowLastResult(value => { if (!_disposed) _status!.Text = value; });
+        NativeUi.FocusLoop(_layer); _name.GrabFocus();
     }
 
-    private Label Text(string text, int size = 24)
-    {
-        var label = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        label.AddThemeFontSizeOverride("font_size", size);
-        _body.AddChild(label);
-        return label;
-    }
-
+    private Label Text(string text, int size = 24) => NativeUi.Label(_target, text, size);
     private LineEdit Input(string label, string value)
     {
-        Text(label, 20);
-        var input = new LineEdit { Text = value, CustomMinimumSize = new Vector2(0, 52) };
-        input.AddThemeFontSizeOverride("font_size", 24);
-        _body.AddChild(input);
-        return input;
+        Text(label, 22);
+        return NativeUi.Input(_target, value);
     }
 
-    private Button Button(string text, Action action)
-    {
-        var button = new Button { Text = text, CustomMinimumSize = new Vector2(0, 54) };
-        button.AddThemeFontSizeOverride("font_size", 24);
-        button.Pressed += action;
-        _body.AddChild(button);
-        return button;
-    }
+    private UiAction Button(string text, Action action) => new(_target, text, action);
 
     private void ApplySettings()
     {
@@ -184,9 +150,9 @@ internal sealed class LanPanel
             ApplySettings();
             var service = LanSession.Host(_menu, _runName.Text);
             _layer.QueueFree();
-            InvitePanel.Show(_menu.GetTree().Root, service, LanSession.Settings);
+
         }
-        catch (Exception ex) { _status.Text = ex.Message; GD.PushWarning($"[STS2 LAN Co-op] {ex}"); }
+        catch (Exception ex) { _status!.Text = ex.Message; GD.PushWarning($"[STS2 LAN Co-op] {ex}"); }
     }
 
     private async Task Join()
@@ -196,7 +162,7 @@ internal sealed class LanPanel
         {
             ApplySettings();
             if (!Endpoint.TryParse(_address.Text, out var endpoint, out var error))
-            { _status.Text = error; return; }
+            { _status!.Text = error; return; }
             SetBusy(true);
             _requestCancel = new();
             // Platform-specific file checks precede the unchanged native admission.
@@ -204,29 +170,35 @@ internal sealed class LanPanel
                 !await ModSyncWorkflow.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token)) return;
             if (LanCapability.Android &&
                 !await MobileModSync.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token, offerDownload: false)) return;
-            _status.Text = "正在连接并检查兼容性……";
-            if (_inspectedEndpoint != endpoint) { _inspected = null; _chosenSlot = null; }
+            _status!.Text = "正在连接并检查兼容性……";
+            if (_inspectedEndpoint != endpoint) { _inspected = null; }
             if (_inspected == null)
             {
                 _inspected = await AdmissionTransport.Request(_menu.GetTree(), endpoint!, new(), _requestCancel.Token);
                 _inspectedEndpoint = endpoint;
             }
-            if (_inspected.Resume && !_chosenSlot.HasValue)
-            { ShowSlots(_inspected); _status.Text = "这是继续对局，请先选择一个客机角色，再连接。"; return; }
-            await LanSession.Join(_menu, endpoint!, flow => _flow = flow, _chosenSlot, _inspected);
+            ulong? selectedSlot = null;
+            if (_inspected.Resume)
+            {
+                _status.Text = "请选择要接管的存档角色。";
+                var choice = await SavedRolePicker.Choose(_menu, endpoint!, _inspected, _requestCancel.Token);
+                if (choice == null) { _status.Text = "已返回房间，尚未认领角色。"; return; }
+                _inspected = choice.Room; selectedSlot = choice.Slot;
+            }
+            await LanSession.Join(_menu, endpoint!, flow => _flow = flow, selectedSlot, _inspected);
             _flow = null;
             _requestCancel?.Dispose(); _requestCancel = null;
             if (!_disposed) _layer.QueueFree();
         }
-        catch (OperationCanceledException) { if (!_disposed) _status.Text = "连接已取消或超时，请检查地址、组网和 UDP 隧道。"; }
+        catch (OperationCanceledException) { if (!_disposed) _status!.Text = "连接已取消或超时，请检查地址、组网和 UDP 隧道。"; }
         catch (ClientConnectionFailedException ex)
         {
-            if (!_disposed) _status.Text = $"连接失败：{ex.info}。本机游戏 {GameBuild.Version}；请核对双方游戏版本与 Mod 版本是否一致，以及 UDP 隧道。";
+            if (!_disposed) _status!.Text = $"连接失败：{ex.info}。本机游戏 {GameBuild.Version}；请核对双方游戏版本与 Mod 版本是否一致，以及 UDP 隧道。";
             GD.PushWarning($"[STS2 LAN Co-op] {ex}");
         }
         catch (Exception ex)
         {
-            if (!_disposed) _status.Text = ex.Message;
+            if (!_disposed) _status!.Text = ex.Message;
             GD.PushWarning($"[STS2 LAN Co-op] {ex}");
         }
         finally
@@ -239,7 +211,7 @@ internal sealed class LanPanel
 
     private void SetBusy(bool busy)
     {
-        _busy = busy;
+        _busy = busy; _layer.Busy = busy;
         _host.Disabled = busy || _hostBlock != null;
         _join.Disabled = busy || _joinBlock != null;
         _sync.Disabled = busy || !LanCapability.CanInspectMods;
@@ -251,7 +223,7 @@ internal sealed class LanPanel
         _runName.Editable = !busy;
         _reloadKey.Editable = !busy;
         _shareMods.Disabled = busy || _hostBlock != null;
-        _close.Text = busy ? "取消连接" : "关闭";
+        _close.Text = busy ? "取消连接" : "返回";
     }
 
     private void CloseOrCancel()
@@ -289,50 +261,11 @@ internal sealed class LanPanel
         try
         {
             SetBusy(true); _requestCancel = new();
-            await WorkshopOrganizationWorkflow.Organize(_menu, text => { if (!_disposed) _status.Text = text; }, _requestCancel.Token, restore);
+            await WorkshopOrganizationWorkflow.Organize(_menu, text => { if (!_disposed) _status!.Text = text; }, _requestCancel.Token, restore);
         }
-        catch (OperationCanceledException) { if (!_disposed) _status.Text = "工坊整理已取消，目录未改动。"; }
-        catch (Exception ex) { if (!_disposed) _status.Text = ex.Message; GD.PushWarning(ex.ToString()); }
+        catch (OperationCanceledException) { if (!_disposed) _status!.Text = "工坊整理已取消，目录未改动。"; }
+        catch (Exception ex) { if (!_disposed) _status!.Text = ex.Message; GD.PushWarning(ex.ToString()); }
         finally { _requestCancel?.Dispose(); _requestCancel = null; if (!_disposed) SetBusy(false); }
-    }
-
-    private void RefreshSaves()
-    {
-        if (_busy) return;
-        foreach (var child in _saves.GetChildren()) { _saves.RemoveChild(child); child.QueueFree(); }
-        try
-        {
-            SaveLibrary.ImportWorking();
-            var entries = SaveLibrary.Catalog.List();
-            if (entries.Count == 0) _saves.AddChild(new Label { Text = "尚无多人存档。进入对局后会在原版保存点自动归档。" });
-            foreach (var entry in entries)
-            {
-                var row = new VBoxContainer(); _saves.AddChild(row);
-                row.AddChild(new Label { Text = $"{entry.Name} · {entry.PlayerCount}人 · 第{entry.Act}幕/{entry.Floor}层 · {entry.SavedAt.ToLocalTime():MM-dd HH:mm} · {(entry.ModEnvironment.Length==0?"历史模组环境未记录":"已记录模组环境")}" });
-                var rename = new LineEdit { Text = entry.Name, MaxLength = 40 }; row.AddChild(rename);
-                var actions = new HBoxContainer(); row.AddChild(actions);
-                var resume = new Button { Text = "继续此对局", CustomMinimumSize = new Vector2(200, 48), Disabled = _hostBlock != null }; actions.AddChild(resume);
-                resume.Pressed += () =>
-                {
-                    if (_busy) return;
-                    try
-                    {
-                        ApplySettings();
-                        var service = LanSession.Host(_menu, resume: SaveLibrary.Catalog.Read(entry.Id));
-                        _layer.QueueFree(); InvitePanel.Show(_menu.GetTree().Root, service, LanSession.Settings);
-                    }
-                    catch (Exception ex) { _status.Text = ex.Message; GD.PushWarning(ex.ToString()); }
-                };
-                var change = new Button { Text = "保存名称", CustomMinimumSize = new Vector2(180, 48) }; actions.AddChild(change);
-                change.Pressed += () =>
-                {
-                    if (_busy) return;
-                    try { SaveLibrary.Rename(entry.Id, rename.Text); RefreshSaves(); }
-                    catch (Exception ex) { _status.Text = ex.Message; }
-                };
-            }
-        }
-        catch (Exception ex) { _status.Text = "读取存档失败，原文件已保留：" + ex.Message; }
     }
 
     private async Task Inspect()
@@ -342,36 +275,21 @@ internal sealed class LanPanel
         {
             ApplySettings();
             if (!Endpoint.TryParse(_address.Text, out var endpoint, out var error)) throw new InvalidDataException(error);
-            SetBusy(true); _requestCancel = new(); _status.Text = "正在获取房间和角色资料……";
+            SetBusy(true); _requestCancel = new(); _status!.Text = "正在获取房间和角色资料……";
             var info = await AdmissionTransport.Request(_menu.GetTree(), endpoint!, new(), _requestCancel.Token);
             if (_disposed) return;
-            _inspectedEndpoint = endpoint; _inspected = info; _chosenSlot = null; ShowSlots(info);
-            _status.Text = info.Running ? "对局正在进行，请等待主机保存退出后重新组队。" :
-                info.Resume ? $"{info.Name}：需要{info.Count}人，请选择客机角色。" : "新房间，可以直接连接。";
+            _inspectedEndpoint = endpoint; _inspected = info; ShowSlots(info);
+            _status!.Text = info.Running ? "对局正在进行，请等待主机保存退出后重新组队。" :
+                info.Resume ? $"{info.Name}：需要{info.Count}人，点击连接房间选择接管角色。" : "新房间，可以直接连接。";
         }
-        catch (Exception ex) { if (!_disposed) _status.Text = ex.Message; }
+        catch (Exception ex) { if (!_disposed) _status!.Text = ex.Message; }
         finally { _requestCancel?.Dispose(); _requestCancel = null; if (!_disposed) SetBusy(false); }
     }
 
     private void ShowSlots(AdmissionMessage info)
     {
         foreach (var child in _slots.GetChildren()) { _slots.RemoveChild(child); child.QueueFree(); }
-        foreach (var slot in info.Slots)
-        {
-            var locked = slot.NativeId == 1 || info.Occupied.Contains(slot.NativeId.ToString());
-            var character = string.IsNullOrEmpty(slot.CharacterTitle) ? slot.Character : slot.CharacterTitle;
-            var label = $"{character} · 生命{slot.Hp}/{slot.MaxHp} · 金币{slot.Gold}";
-            var choose = new Button { Text = label + (slot.NativeId == 1 ? "（主机固定）" : locked ? "（已占用）" : "（选择）"), Disabled = locked || info.Running };
-            _slots.AddChild(choose);
-            string Pretty(IEnumerable<string> items) => string.Join("、", items.Select(id => slot.Titles.GetValueOrDefault(id, id)));
-            var detail = new Label { Text = $"遗物：{Pretty(slot.Relics)}\n药水：{Pretty(slot.Potions)}\n牌组（{slot.Deck.Count}张）：{Pretty(slot.Deck)}",
-                AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(600, 0) };
-            detail.AddThemeFontSizeOverride("font_size", 18); _slots.AddChild(detail);
-            choose.Pressed += () =>
-            {
-                if (_busy) return;
-                _chosenSlot = slot.NativeId; _status.Text = $"已选择{label}，点击连接。";
-            };
-        }
+        NativeUi.Label(_slots, info.Resume ? $"{info.Name} · {info.Count}人存档" : "新的多人冒险", 28, true);
+        NativeUi.Label(_slots, info.Running ? "对局正在进行。" : info.Resume ? "连接时选择已有角色，保留原来的完整进度。" : "连接后进入原版选角大厅。");
     }
 }
