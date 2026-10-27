@@ -59,6 +59,7 @@ internal static class LanSession
         if (Active) throw new InvalidOperationException("已有 LAN 会话，请先离开房间。");
         var block = GetBlockReason();
         if (block != null) throw new InvalidOperationException(block);
+        RitsuNetworkInterop.Ensure();
         Settings.Validate();
         Save();
         LocalId = id;

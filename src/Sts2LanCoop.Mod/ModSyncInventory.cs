@@ -13,13 +13,15 @@ internal static class ModSyncInventory
     public static string GameRoot => LanCapability.Windows ? Path.GetDirectoryName(System.Environment.ProcessPath)!
         : throw new InvalidOperationException("Android同步使用独立缓存，不使用PC游戏目录或PowerShell应用器。");
     public static string Cache => Path.Combine(Storage,"cache");
+    public static string MobileImports => Path.Combine(Storage,"import");
     private static readonly Dictionary<string,string> Startup = new(StringComparer.OrdinalIgnoreCase);
     private static Task<List<SyncMod>>? _startup;
     public static string LastEnvironment {get;private set;}="";
     public static List<SyncMod> LastProfile {get;private set;}=[];
     public static void CaptureStartup() { _startup ??= Read(); }
-    public static async Task<List<SyncMod>> Read()
+    public static async Task<List<SyncMod>> Read(SyncProfile? mobileHost = null)
     {
+        var mobileRequired=mobileHost!=null ? ModSyncRules.Required(mobileHost) : null;
         var mods = ModManager.Mods.Where(m=>m.manifest?.id!=null).Select(m=>new
         {
             Assemblies=GameBuild.Assemblies(m).ToArray(), Data=new SyncMod
@@ -35,7 +37,10 @@ internal static class ModSyncInventory
             var data=m.Data;
             try
             {
-                var files=ModSyncFiles.Scan(data.Directory);
+                var runtimeFiles=LanCapability.Android ? MobileModFiles.RuntimeFiles(data.Directory,data.Id) : null;
+                var target=LanCapability.Android && mobileRequired?.Contains(data.Id)==true ? mobileHost!.Mods.Single(h=>h.Id.Equals(data.Id,StringComparison.OrdinalIgnoreCase)) : null;
+                var inspection=target!=null ? MobileModFiles.Inspect(target,data.Directory,Cache) : default;
+                var files=LanCapability.Android ? inspection.Files??runtimeFiles! : ModSyncFiles.Scan(data.Directory);
                 if(data.Id==ModSyncRules.CoreId) files=files.Where(f=>f.Name==data.Id+".dll"||f.Name==data.Id+".json").ToList();
                 foreach(var assembly in m.Assemblies.Where(a=>!a.IsDynamic))
                 {
@@ -44,22 +49,27 @@ internal static class ModSyncInventory
                         throw new IOException("已加载 DLL 与磁盘版本不同，请重启游戏。");
                 }
                 var fingerprint=ModSyncRules.Fingerprint(files);
+                var startupFingerprint=runtimeFiles!=null ? ModSyncRules.Fingerprint(runtimeFiles) : fingerprint;
                 lock(Startup)
                 {
                     var key=data.Directory+"|"+data.Id;
-                    if(data.Loaded && Startup.TryGetValue(key,out var before) && before!=fingerprint)throw new IOException("游戏启动后文件发生变化，请重启。");
-                    if(data.Loaded)Startup.TryAdd(key,fingerprint);
+                    if(data.Loaded && Startup.TryGetValue(key,out var before) && before!=startupFingerprint)throw new IOException("游戏启动后文件发生变化，请重启。");
+                    if(data.Loaded)Startup.TryAdd(key,startupFingerprint);
                 }
                 var parts=data.Directory.Replace('\\','/').Split('/');ulong workshop=0;
                 for(var i=0;i<parts.Length-1;i++)if(parts[i]=="2868840")ulong.TryParse(parts[i+1],out workshop);
-                return data with {Files=files,Fingerprint=fingerprint,Workshop=workshop};
+                return data with {Files=files,Fingerprint=fingerprint,Workshop=workshop,FileNotes=inspection.Notes??[],RuntimeFingerprint=startupFingerprint};
             }
             catch(Exception ex){return data with {Unavailable=ex.Message};}
         }).ToList());
-        if(inventory.Where(m=>m.Loaded).All(m=>m.Unavailable.Length==0))
+        var snapshotRequired=ModSyncRules.Required(new SyncProfile{Mods=inventory.Where(m=>m.Loaded).ToList()});
+        if(inventory.Where(m=>m.Loaded&&snapshotRequired.Contains(m.Id)).All(m=>m.Unavailable.Length==0))
         {
-            LastEnvironment=EnvironmentHash(inventory);
-            LastProfile=inventory.Where(m=>m.Loaded).Select(m=>m with{Files=[],Directory=""}).ToList();
+            // Save/reload identity must not depend on whether a host profile was
+            // supplied, or whether a cached manifest was normalized for comparison.
+            var snapshot=LanCapability.Android ? inventory.Select(m=>m with{Fingerprint=m.RuntimeFingerprint}).ToList() : inventory;
+            LastEnvironment=EnvironmentHash(snapshot);
+            LastProfile=snapshot.Where(m=>m.Loaded).Select(m=>m with{Files=[],Directory="",Manifest=null,FileNotes=[]}).ToList();
         }
         return inventory;
     }
@@ -73,11 +83,14 @@ internal static class ModSyncInventory
     {
         if(_startup!=null)await _startup;
         var mods=(await Read()).Where(m=>m.Loaded).ToList();
-        foreach(var mod in mods.Where(m=>m.Unavailable.Length>0))throw new IOException(mod.Name+"："+mod.Unavailable);
         var profile=new SyncProfile{Game=GameBuild.Version,Session=AdmissionTransport.Session,Mods=mods};var required=ModSyncRules.Required(profile);
+        foreach(var mod in mods.Where(m=>required.Contains(m.Id)&&m.Unavailable.Length>0))throw new IOException(mod.Name+"："+mod.Unavailable);
         var published=new List<SyncMod>();
-        foreach(var mod in mods)
+        foreach(var inventoryMod in mods)
         {
+            var mod=inventoryMod;
+            if(required.Contains(mod.Id))
+                mod=mod with{Manifest=await Task.Run(()=>MobileModFiles.ReadHostManifest(mod))};
             if(!required.Contains(mod.Id)||mod.Id==ModSyncRules.CoreId||!LanSession.Settings.ShareMods)
             {published.Add(mod with{Unavailable=mod.Id==ModSyncRules.CoreId?"核心需手动统一版本":"主机未同意共享文件"});continue;}
             try

@@ -3,7 +3,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>0.7.0-alpha.6</Version>
+    <Version>0.7.0-alpha.8</Version>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 </Project>

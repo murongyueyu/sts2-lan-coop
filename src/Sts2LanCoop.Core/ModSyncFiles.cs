@@ -5,6 +5,12 @@ namespace Sts2LanCoop.Core;
 
 public static class ModSyncFiles
 {
+    public static string UnitFolder(string id)
+    {
+        Relative(id);
+        if (id.Contains('/')) throw new InvalidDataException("模组ID不能包含路径。");
+        return id;
+    }
     public const long MaxPackageSize=4L*1024*1024*1024;
     private static readonly string[] ForbiddenNames=["sts2.dll","godotsharp.dll","0harmony.dll","steam_api64.dll","steam_api.dll","settings.save","current_run_mp.save"];
     private static readonly string[] ForbiddenExtensions=[".exe",".com",".cmd",".bat",".ps1",".vbs",".lnk",".url",".reg",".log",".save",".pdb",".user",".key",".pem"];

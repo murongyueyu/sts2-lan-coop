@@ -30,6 +30,8 @@ internal sealed class LanPanel
     private readonly Button _join;
     private readonly Button _sync;
     private readonly Button _restore;
+    private readonly Button? _organizeWorkshop;
+    private readonly Button? _restoreWorkshop;
     private readonly Button _unlock;
     private readonly Button _close;
     private readonly string? _hostBlock;
@@ -105,6 +107,12 @@ internal sealed class LanPanel
             Text("自动应用不可用：" + syncBlock, 20);
             if (LanCapability.Android) Text("可检查差异并下载主机包；下载不代表Android兼容，也不会自动安装或调整启用状态。", 20);
         }
+        Text("仅要求玩法模组及其依赖一致；独立美化和辅助前置可保留各自配置。", 20);
+        if (LanCapability.Windows)
+        {
+            _organizeWorkshop = Button("整理 Steam 工坊原目录（退出后执行）", () => _ = OrganizeWorkshop());
+            _restoreWorkshop = Button("恢复最近一次工坊目录整理", () => _ = OrganizeWorkshop(restore: true));
+        }
         _slots = new VBoxContainer(); _body.AddChild(_slots);
         _join = Button("连接", () => _ = Join());
         if (_joinBlock != null) _join.Disabled = true;
@@ -124,6 +132,7 @@ internal sealed class LanPanel
         _layer.TreeExiting += () => { _disposed = true; _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); };
         RefreshSaves();
         ModSyncWorkflow.ShowPending(_menu, value => _address.Text=value, value => {if(!_disposed)_status.Text=value;});
+        WorkshopOrganizationWorkflow.ShowLastResult(value => {if(!_disposed)_status.Text=value;});
     }
 
     private Label Text(string text, int size = 24)
@@ -190,7 +199,7 @@ internal sealed class LanPanel
             { _status.Text = error; return; }
             SetBusy(true);
             _requestCancel = new();
-            // 期1：Android跳过依赖Windows的模组同步检查；准入协议校验仍在LanSession.Join内执行。
+            // Platform-specific file checks precede the unchanged native admission.
             if (LanCapability.Windows &&
                 !await ModSyncWorkflow.Check(_menu, endpoint!, text => {if(!_disposed)_status.Text=text;}, _requestCancel.Token)) return;
             if (LanCapability.Android &&
@@ -235,6 +244,8 @@ internal sealed class LanPanel
         _join.Disabled = busy || _joinBlock != null;
         _sync.Disabled = busy || !LanCapability.CanInspectMods;
         _restore.Disabled = busy || LanCapability.ModSyncBlockReason != null;
+        if (_organizeWorkshop != null) _organizeWorkshop.Disabled = busy;
+        if (_restoreWorkshop != null) _restoreWorkshop.Disabled = busy;
         _unlock.Disabled = busy || LanCapability.SharedUnlockBlockReason != null;
         _name.Editable = _port.Editable = _address.Editable = !busy;
         _runName.Editable = !busy;
@@ -271,6 +282,18 @@ internal sealed class LanPanel
         try{SetBusy(true);_requestCancel=new();await ModSyncWorkflow.RestoreLatest(_menu,_requestCancel.Token);}
         catch(Exception ex){if(!_disposed)_status.Text=ex.Message;}
         finally{_requestCancel?.Dispose();_requestCancel=null;if(!_disposed)SetBusy(false);}
+    }
+    private async Task OrganizeWorkshop(bool restore = false)
+    {
+        if (_busy) return;
+        try
+        {
+            SetBusy(true); _requestCancel = new();
+            await WorkshopOrganizationWorkflow.Organize(_menu, text => { if (!_disposed) _status.Text = text; }, _requestCancel.Token, restore);
+        }
+        catch (OperationCanceledException) { if (!_disposed) _status.Text = "工坊整理已取消，目录未改动。"; }
+        catch (Exception ex) { if (!_disposed) _status.Text = ex.Message; GD.PushWarning(ex.ToString()); }
+        finally { _requestCancel?.Dispose(); _requestCancel = null; if (!_disposed) SetBusy(false); }
     }
 
     private void RefreshSaves()

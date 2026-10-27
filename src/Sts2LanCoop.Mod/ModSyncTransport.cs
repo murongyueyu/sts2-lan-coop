@@ -15,6 +15,11 @@ internal static class ModSyncTransport
     public static bool IsControl(byte[] bytes)=>SyncTransferWire.IsControl(bytes);
     private static byte[] Encode(SyncMessage msg)=>SyncTransferWire.Encode(msg);
     private static SyncMessage Decode(byte[] bytes)=>SyncTransferWire.Decode(bytes);
+    public static async Task<SyncProfile> ReadProfile(SceneTree tree,Endpoint endpoint,CancellationToken cancel)
+    {
+        using var client=new Client(tree,endpoint);
+        return await client.Profile(cancel);
+    }
     public static void Serve(ENetPacketPeer peer,byte[] bytes)
     {
         SyncMessage response;
@@ -96,7 +101,7 @@ internal static class ModSyncTransport
                     }
                     await _tree.ToSignal(_tree,SceneTree.SignalName.ProcessFrame);
                 }
-                throw new TimeoutException("同步超时，请检查UDP地址和隧道。下载缓存保留，可重试。");
+                throw new TimeoutException($"同步请求超时（{request.Operation}，{(_connected?"已连接":"握手未完成")}，{(sent?"已发请求":"未发请求")}）。下载缓存保留，可重试；请保留当前阶段和主机日志。");
             }
             finally { _discardThrough=_nextId; _busy=false; }
         }
@@ -113,7 +118,7 @@ internal static class ModSyncTransport
             {
                 var ev=data!.Value;
                 if(ev.type==ENetConnection.EventType.Connect)_connected=true;
-                if(ev.type==ENetConnection.EventType.Disconnect)throw new IOException("房主断开了同步连接，请确认双方使用0.7.0-alpha.6或更新的同版Mod。");
+                if(ev.type==ENetConnection.EventType.Disconnect)throw new IOException("房主断开了同步连接，请确认双方使用0.7.0-alpha.8或更新的同版Mod。");
                 if(ev.type==ENetConnection.EventType.Receive)
                 {
                     var response=Decode(ev.packetData);
@@ -214,6 +219,7 @@ internal static class ModSyncTransport
             Directory.CreateDirectory(ModSyncInventory.Cache);var target=Path.Combine(ModSyncInventory.Cache,mod.Bundle+".zip");
             if(File.Exists(target))
             {
+                progress("正在核验完整缓存："+mod.Name);
                 if(await Task.Run(()=>ModSyncRules.FileHash(target))!=mod.Bundle)throw new IOException("缓存校验失败，请清除损坏文件："+target);
                 await Task.Run(()=>ModSyncFiles.VerifyMod(target,mod));cancel.ThrowIfCancellationRequested();return target;
             }
@@ -225,6 +231,7 @@ internal static class ModSyncTransport
                 cancel.ThrowIfCancellationRequested();
                 file.Flush(true);
             }
+            progress("下载完成，正在校验文件："+mod.Name);
             if(await Task.Run(()=>ModSyncRules.FileHash(partial))!=mod.Bundle){File.Delete(partial);throw new IOException("下载校验失败，损坏分片已清除，可重试。");}
             await Task.Run(()=>ModSyncFiles.VerifyMod(partial,mod));cancel.ThrowIfCancellationRequested();File.Move(partial,target);return target;
         }

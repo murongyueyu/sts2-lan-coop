@@ -7,6 +7,7 @@ namespace Sts2LanCoop.Core;
 
 public sealed record SyncDependency(string Id, string Minimum);
 public sealed record SyncFile(string Name, long Size, string Hash);
+public sealed record SyncManifest(string Name, byte[] Data);
 public sealed record SyncMod
 {
     public string Id { get; init; } = "";
@@ -22,7 +23,10 @@ public sealed record SyncMod
     public string Unavailable { get; init; } = "";
     public List<SyncDependency> Dependencies { get; init; } = [];
     public List<SyncFile> Files { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public SyncManifest? Manifest { get; init; }
     [JsonIgnore] public string Directory { get; init; } = "";
+    [JsonIgnore] public List<string> FileNotes { get; init; } = [];
+    [JsonIgnore] public string RuntimeFingerprint { get; init; } = "";
 }
 public sealed record SyncProfile
 {

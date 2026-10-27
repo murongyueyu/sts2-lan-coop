@@ -9,6 +9,7 @@ internal static class NativeMessageCompatibility
 {
     private static NativeMessageMap? _clientMap;
     private static int _sentLogs, _receivedLogs;
+    private static readonly HashSet<string> Milestones = [];
     public static List<string> Capture()
     {
         var cache = AccessTools.Field(typeof(MessageTypes), "_cache")
@@ -35,7 +36,7 @@ internal static class NativeMessageCompatibility
             throw failure;
         }
     }
-    public static void Reset() { _clientMap = null; _sentLogs = _receivedLogs = 0; }
+    public static void Reset() { _clientMap = null; _sentLogs = _receivedLogs = 0; Milestones.Clear(); }
     public static void AcceptHost(List<string> host)
     {
         var local = Capture();
@@ -55,9 +56,10 @@ internal static class NativeMessageCompatibility
         // Hosts already use the canonical numbering, but log their received native type too.
         var result = _clientMap == null ? payload : outgoing ? _clientMap.ToHost(payload) : _clientMap.FromHost(payload);
         ref var count = ref (outgoing ? ref _sentLogs : ref _receivedLogs);
-        if (count < 3 && payload.Length > 0 && MessageTypes.TryGetMessageType(outgoing ? payload[0] : result[0], out var type))
+        if (payload.Length > 0 && MessageTypes.TryGetMessageType(outgoing ? payload[0] : result[0], out var type) &&
+            (count < 3 || type!.Name == "LobbyBeginRunMessage" && Milestones.Add((outgoing ? "sent:" : "received:") + type.FullName)))
         {
-            count++;
+            if (count < 3) count++;
             GD.Print($"[STS2 LAN Co-op] 原版消息{(outgoing ? "发送" : "接收")}：{type!.Name}，编号{payload[0]}→{result[0]}，长度{payload.Length}。");
         }
         return result;

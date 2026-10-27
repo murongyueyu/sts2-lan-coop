@@ -17,8 +17,7 @@ internal static class ModSyncWorkflow
         if(RunManager.Instance.IsInProgress||LanSession.Active)
             throw new InvalidOperationException("请先退出当前对局/房间，在多人菜单同步。");
         progress("正在读取主机模组与本机文件……");
-        using var client=new ModSyncTransport.Client(parent.GetTree(),endpoint);
-        var profile=await client.Profile(cancel);
+        var profile=await ModSyncTransport.ReadProfile(parent.GetTree(),endpoint,cancel);
         var local=await ModSyncInventory.Read();cancel.ThrowIfCancellationRequested();
         var comparison=ModSyncRules.Compare(profile,local,GameBuild.Version);
         if(comparison.Errors.Count>0)throw new InvalidOperationException(string.Join("\n",comparison.Errors));
@@ -40,12 +39,16 @@ internal static class ModSyncWorkflow
         foreach(var change in comparison.Changes.Where(c=>c.Action is "add" or "replace"))
         {
             cancel.ThrowIfCancellationRequested();
-            packages[change.Id]=source==1
-                ?await ModSyncSteam.Download(parent.GetTree(),change.Target!,progress,cancel)
-                :await client.Download(profile,change.Target!,progress,cancel);
+            if(source==1)packages[change.Id]=await ModSyncSteam.Download(parent.GetTree(),change.Target!,progress,cancel);
+            else
+            {
+                using var client=new ModSyncTransport.Client(parent.GetTree(),endpoint);
+                packages[change.Id]=await client.Download(profile,change.Target!,progress,cancel);
+            }
         }
         // Re-query before committing a consented snapshot, including host room identity.
-        var fresh=await client.Profile(cancel);
+        progress("文件已获取，正在重新连接并复核主机房间……");
+        var fresh=await ModSyncTransport.ReadProfile(parent.GetTree(),endpoint,cancel);
         if(fresh.Session!=profile.Session||fresh.Revision!=profile.Revision)throw new IOException("主机房间或模组已变化，请重新检查。");
         var plan=await Prepare(profile,comparison,local,packages,endpoint);
         progress("文件已全部校验，尚未应用。确认后将退出、备份、应用并重启。");
@@ -85,7 +88,7 @@ internal static class ModSyncWorkflow
                 backups.Add(ModSyncFiles.Child(mods,relative));
                 backupFiles[ModSyncFiles.Child(mods,relative)]=copy.Files;
             }
-            var folder="lan-synced-"+ModSyncRules.Digest(System.Text.Encoding.UTF8.GetBytes(change.Id))[..16];
+            var folder=ModSyncFiles.UnitFolder(change.Id);
             var destination=ModSyncFiles.Child(Path.Combine(ModSyncInventory.GameRoot,"mods"),folder);
             if(Directory.Exists(destination)&&!backups.Contains(destination,StringComparer.OrdinalIgnoreCase))throw new IOException("安装目标已存在，请先检查："+destination);
             installs.Add(new(change.Id,archive,ModSyncRules.FileHash(archive),folder,backups,target.Files){BackupFiles=backupFiles});

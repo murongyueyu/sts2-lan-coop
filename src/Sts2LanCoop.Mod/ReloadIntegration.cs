@@ -35,7 +35,8 @@ internal static class ReloadGameEpoch
         if (!LanSession.Active) return;
         var bytes = __result.AsAppMessage();
         if (ReloadWire.Matches(bytes) || AdmissionWire.IsControl(bytes)) return;
-        __result = new ENetPacket([__result.AllBytes[0], .. GameEpochWire.Wrap(QuickReload.Epoch, NativeMessageCompatibility.Outgoing(bytes))]);
+        var payload = RitsuNetworkInterop.IsSidecar(bytes) ? bytes : NativeMessageCompatibility.Outgoing(bytes);
+        __result = new ENetPacket([__result.AllBytes[0], .. GameEpochWire.Wrap(QuickReload.Epoch, payload)]);
     }
 }
 
@@ -51,17 +52,20 @@ internal static class ReloadRouting
             return false;
         }
         if (QuickReload.DropOldTraffic || !GameEpochWire.TryRead(QuickReload.Epoch, packet, out var payload)) return false;
-        packet = NativeMessageCompatibility.Incoming(payload); return true;
+        packet = RitsuNetworkInterop.IsSidecar(payload) ? payload : NativeMessageCompatibility.Incoming(payload);
+        return true;
     }
 }
 [HarmonyPatch(typeof(NetHostGameService), nameof(NetHostGameService.OnPacketReceived))]
 internal static class ReloadHostRoute
 {
+    [HarmonyPriority(Priority.First)]
     private static bool Prefix(NetHostGameService __instance, ulong senderId, ref byte[] packetBytes) => ReloadRouting.Route(__instance, senderId, ref packetBytes);
 }
 [HarmonyPatch(typeof(NetClientGameService), nameof(NetClientGameService.OnPacketReceived))]
 internal static class ReloadClientRoute
 {
+    [HarmonyPriority(Priority.First)]
     private static bool Prefix(NetClientGameService __instance, ulong senderId, ref byte[] packetBytes) => ReloadRouting.Route(__instance, senderId, ref packetBytes);
 }
 
