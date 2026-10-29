@@ -7,7 +7,8 @@ namespace Sts2LanCoop.Core;
 
 public sealed record ReloadFrame
 {
-    public int Version { get; init; } = 2;
+    public int Version { get; init; } = 3;
+    public string Ending { get; init; } = "";
     public string Operation { get; init; } = "";
     public string Session { get; init; } = "";
     public string Request { get; init; } = "";
@@ -39,7 +40,7 @@ public static class ReloadWire
     {
         if (!Matches(bytes) || bytes.Length > 32772) throw new InvalidDataException("无效快速SL报文。");
         var frame = JsonSerializer.Deserialize<ReloadFrame>(bytes.AsSpan(4)) ?? throw new InvalidDataException("SL报文为空。");
-        if (frame.Version != 2 || frame.Data.Length > ChunkSize || frame.Slots.Length > 4 || frame.Detail.Length > 500)
+        if (frame.Version != 3 || frame.Ending.Length > 32 || frame.Data.Length > ChunkSize || frame.Slots.Length > 4 || frame.Detail.Length > 500)
             throw new InvalidDataException("快速SL协议不兼容或数据超限。");
         return frame;
     }

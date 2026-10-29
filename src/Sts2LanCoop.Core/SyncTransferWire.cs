@@ -46,7 +46,7 @@ public static class SyncTransferWire
     public static SyncMessage Decode(byte[] bytes)
     {
         if (bytes.Length < 8 || bytes.Length > 8 + MaxMetadata + ChunkSize || !bytes.AsSpan(0, 4).SequenceEqual(Magic))
-            throw new InvalidDataException("模组传输协议不同或报文过大，请双方统一更新到0.8.0-alpha.3或更新的同版Mod。");
+            throw new InvalidDataException("模组传输协议不同或报文过大，请双方统一更新到0.8.0-alpha.4或更新的同版Mod。");
         var length = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(4, 4));
         if (length is <= 0 or > MaxMetadata || length > bytes.Length - 8 || bytes.Length - 8 - length > ChunkSize)
             throw new InvalidDataException("同步报文长度无效。");

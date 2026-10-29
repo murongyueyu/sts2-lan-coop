@@ -14,7 +14,8 @@ internal static class LanCapability
     public static bool CanInspectMods => Windows || Android;
     public static PeerCapabilities Capabilities => new()
     {
-        Platform = Android ? "Android" : Platform, ReloadVersion = LanPlatform.CanQuickReload(Kind) ? 2 : 0
+        Platform = Android ? "Android" : Platform, ReloadVersion = LanPlatform.CanQuickReload(Kind) ? 3 : 0,
+        RunStateVersion = 1
     };
     public static string? JoinBlockReason => LanPlatform.CanJoin(Kind) ? null :
         $"此开发版仅在 Windows 和 Android 提供连接入口（当前系统：{Platform}）。";

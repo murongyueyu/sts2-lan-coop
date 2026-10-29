@@ -25,7 +25,7 @@ internal static class AdmissionTransport
     private static readonly Dictionary<ulong, PeerCapabilities> Capabilities = [];
     public static string? ReloadBlockReason(IEnumerable<ulong> slots) => slots.Where(id => id != 1)
         .Any(id => !Capabilities.TryGetValue(id, out var value) || !value.CanReload)
-            ? "有玩家未声明支持全员SL协议2，请统一版本并重新入房。" : null;
+            ? "有玩家未声明支持全员SL协议3，请统一版本并重新入房。" : null;
     private static readonly Dictionary<ENetPacketPeer, ulong> Pending = [];
     private static ulong _lastBroadcast;
     private static int _emptyPackets;
@@ -66,6 +66,7 @@ internal static class AdmissionTransport
         Session = Session, Capabilities = LanCapability.Capabilities, NativeMessages = NativeMessageCompatibility.Capture(), Resume = LanSession.ResumeEntry != null,
         Revision = LanSession.ResumeEntry?.Revision ?? "", Name = LanSession.ResumeEntry?.Name ?? "新的多人冒险",
         Running = RunManager.Instance.IsInProgress,
+        RequiresRunState = NeuvilletteRunInterop.Required,
         Count = LanSession.ResumeEntry?.PlayerCount ?? 4, Slots = LanSession.ResumeEntry?.Slots ?? [],
         Act = LanSession.ResumeEntry?.Act ?? 0, Floor = LanSession.ResumeEntry?.Floor ?? 0,
         Occupied = (LanSession.HostedService?.NetHost?.ConnectedPeerIds ?? []).Concat(_reservations.ReservedSlots)
@@ -76,6 +77,8 @@ internal static class AdmissionTransport
         var info = Info();
         if (request.Operation == "info") return info;
         if (request.Operation != "reserve") throw new InvalidDataException("未知请求。");
+        if (info.RequiresRunState && request.Capabilities.RunStateVersion != 1)
+            throw new InvalidOperationException("此房间需要局内规则恢复能力1，请所有玩家统一安装0.8.0-alpha.4或更新的同版完整包并重启。");
         if (request.Session != Session || request.Revision != info.Revision) throw new InvalidOperationException("房间已更换存档，请刷新。");
         var mapping = new NativeMessageMap(request.NativeMessages, info.NativeMessages);
         GD.Print($"[STS2 LAN Co-op] 客机消息表校验：{request.NativeMessages.Count}种，需转换{mapping.ChangedCount}种。");

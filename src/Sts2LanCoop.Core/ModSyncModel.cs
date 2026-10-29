@@ -112,8 +112,11 @@ public static class ModSyncRules
     private static bool AtLeast(string version,string minimum)
     {
         if(string.IsNullOrWhiteSpace(minimum))return true;
+        version=version.Trim();minimum=minimum.Trim();
         if(version==minimum)return true;
-        var a=version.Split('+')[0].Split('-',2);var b=minimum.Split('+')[0].Split('-',2);
+        // Third-party manifests commonly prefix versions with v/V (e.g. BaseLib "v3.4.7").
+        static string Bare(string text)=>text.TrimStart('v','V').Trim();
+        var a=Bare(version).Split('+')[0].Split('-',2);var b=Bare(minimum).Split('+')[0].Split('-',2);
         if(!Version.TryParse(a[0],out var actual)||!Version.TryParse(b[0],out var needed))return false;
         var left=new Version(actual.Major,actual.Minor,Math.Max(0,actual.Build),Math.Max(0,actual.Revision));
         var right=new Version(needed.Major,needed.Minor,Math.Max(0,needed.Build),Math.Max(0,needed.Revision));

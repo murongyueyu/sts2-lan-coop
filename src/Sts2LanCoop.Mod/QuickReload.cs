@@ -62,8 +62,10 @@ internal static class QuickReload
         var old = _gameWaits; _gameWaits = new(); old.Cancel(); old.Dispose();
         LastFailure = null; Completed = 0; SuppressCleanupDisconnect = false; ReloadUi.Reset();
     }
-    public static string? BlockReason(bool ignoreBusy = false)
+    public static string? BlockReason(bool ignoreBusy = false, string ending = "")
     {
+        if (RunEndFlow.Pending && !RunEndFlow.CanRetry(ending)) return "本局已失败，请等待主机选择保留、读档重试或删除。";
+        if (ending.Length > 0 && !RunEndFlow.CanRetry(ending)) return "失败处理已过期，请重新组队续玩。";
         if (LanCapability.QuickReloadBlockReason is { } blocked) return blocked;
         if (!LanSession.Active || !RunManager.Instance.IsInProgress) return "请先进入LAN多人对局。";
         if (!LanMobileLifecycle.Foreground) return "请将游戏切回前台后再快速SL。";
@@ -98,15 +100,17 @@ internal static class QuickReload
             throw new InvalidOperationException("人数未到齐：必须原开局人数全部在线，不能缺人快速SL。");
         if (AdmissionTransport.ReloadBlockReason(expected) is { } blocked) throw new InvalidOperationException(blocked);
     }
-    private static async Task StartHost()
+    public static Task RetryEnding(string ending) => StartHost(ending);
+    private static async Task StartHost(string ending = "")
     {
         Attempt? attempt = null;
         if (Busy) return;
         _starting = true; LastFailure = null;
         try
         {
+            if (BlockReason(ignoreBusy: true, ending: ending) is { } initialBlock) throw new InvalidOperationException(initialBlock);
             CheckHostPlayers(); ReloadUi.Progress("检查当前保存点……", cancel: null);
-            await SaveLibrary.EnsureSaved();
+            await SaveLibrary.EnsureSaved(frozenCheckpoint: ending.Length > 0);
             CheckHostPlayers();
             var entry = SaveLibrary.ActiveEntry!;
             var bytes = SaveLibrary.Catalog.ReadPayload(entry);
@@ -114,7 +118,7 @@ internal static class QuickReload
             if (!ids.SequenceEqual(entry.Slots.Select(s => s.NativeId).Order())) throw new InvalidOperationException("当前角色与保存点不一致。");
             var description = new ReloadFrame { Operation = "probe", Session = AdmissionTransport.Session, Request = Guid.NewGuid().ToString("N"),
                 Epoch = checked(Epoch + 1), RunId = entry.Id, Revision = entry.Revision, Digest = Convert.ToHexString(SHA256.HashData(bytes)),
-                Length = bytes.Length, Slots = ids };
+                Length = bytes.Length, Slots = ids, Ending = ending };
             attempt = new(description, LanSession.HostedService!) { Bytes = bytes, Entry = entry, Save = Decode(bytes, ids) };
             _attempt = attempt; _starting = false;
             ReloadUi.Progress($"{entry.Name} · 准备数据 1/{ids.Length}", Cancel);
@@ -131,8 +135,8 @@ internal static class QuickReload
             }
             Broadcast(attempt, description with { Operation = "prepare" }); attempt.Ack("ready", 1);
             await Everyone(attempt, "ready");
-            await SaveLibrary.EnsureSaved(); CheckHostPlayers(attempt);
-            if (BlockReason(ignoreBusy: true) is { } blocked) throw new InvalidOperationException(blocked);
+            await SaveLibrary.EnsureSaved(frozenCheckpoint: ending.Length > 0); CheckHostPlayers(attempt);
+            if (BlockReason(ignoreBusy: true, ending: ending) is { } blocked) throw new InvalidOperationException(blocked);
             if (SaveLibrary.ActiveEntry?.Revision != entry.Revision) throw new InvalidOperationException("准备期间原版更新了保存点，请重新发起SL。");
             SaveLibrary.HoldForReload(entry);
             Broadcast(attempt, description with { Operation = "commit" }); Commit(attempt);
@@ -154,7 +158,7 @@ internal static class QuickReload
     }
     private static SerializableRun Decode(byte[] bytes, IEnumerable<ulong> expected)
     {
-        var save = SaveLibrary.Decode(bytes);
+        var save = SaveLibrary.Decode(bytes, attachExtensions: true);
         if (save.GameMode != GameMode.Standard || !expected.Order().SequenceEqual(save.Players.Select(p => p.NetId).Order()) ||
             !save.Players.Any(p => p.NetId == LanSession.LocalId)) throw new InvalidDataException("SL存档角色集合不匹配。");
         return RunManager.CanonicalizeSave(save, LanSession.LocalId);
@@ -166,6 +170,7 @@ internal static class QuickReload
         if ((host && !LanSession.HostedService!.NetHost!.ConnectedPeerIds.Contains(sender)) || (!host && sender != 1)) return;
         try
         {
+            if (RunEndFlow.Receive(service, sender, frame)) return;
             if (host && frame.Operation == "ask")
             {
                 var blocked=BlockReason();
@@ -177,7 +182,7 @@ internal static class QuickReload
             if (!host && frame.Operation=="notice") { if (!Busy) ReloadUi.Notice(frame.Detail); return; }
             if (!host && frame.Operation == "probe")
             {
-                var blocked = BlockReason();
+                var blocked = BlockReason(ending: frame.Ending);
                 if (blocked != null) throw new InvalidOperationException(blocked);
                 if (frame.Epoch != Epoch + 1 || !RunIds().SequenceEqual(frame.Slots.Order())) throw new InvalidDataException("SL人数或加载代次不一致。");
                 LanMobileLifecycle.ProbeSaveAccess();
@@ -198,7 +203,7 @@ internal static class QuickReload
                 case "begin": ReloadUi.Progress("接收主机保存点……", Cancel); break;
                 case "chunk": attempt.Download!.Add(frame.Index, frame.Data); break;
                 case "prepare":
-                    if (BlockReason(ignoreBusy: true) is { } blocked) throw new InvalidOperationException(blocked);
+                    if (BlockReason(ignoreBusy: true, ending: attempt.Description.Ending) is { } blocked) throw new InvalidOperationException(blocked);
                     attempt.Bytes = attempt.Download!.Complete(); attempt.Save = Decode(attempt.Bytes, attempt.Expected);
                     Reply(attempt, "ready"); break;
                 case "commit":
@@ -331,17 +336,21 @@ internal static class QuickReload
         finally
         {
             if (_attempt == attempt) { _attempt = null; ReloadUi.Notice(reason + (attempt.Committed ? " 已停止本次重载，请从存档重新组队。" : " 当前对局保持运行。")); }
+            if (attempt.Committed) RunEndFlow.ReloadFailed(attempt.Description.Ending);
         }
     }
     private static void Succeed(Attempt attempt)
     {
         if (_attempt != attempt || attempt.Recovering) return;
         RecordStage(attempt, "completed");
+        RunStateTrust.Recovered();
         attempt.Service.SetGameLoading(false); _attempt = null; Completed++; ReloadUi.Hide();
+        RunEndFlow.Reloaded(attempt.Description.Ending);
         GD.Print($"[STS2 LAN Co-op] 快速SL完成，人数{attempt.Expected.Count}，代次{Epoch}，角色分配保持不变。");
     }
     public static void Tick()
     {
+        RunEndFlow.Tick();
         StartupTasks.RemoveAll(t=>t.IsCompleted);
         ReloadUi.CheckHotkey();
         var attempt = _attempt;

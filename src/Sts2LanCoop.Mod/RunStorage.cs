@@ -102,21 +102,53 @@ internal static class RunStorage
     public static bool HasUnresolvedEnding()
     {
         var type = AccessTools.TypeByName("Sts2ModCompatibility.Mod.RelayCoordinator");
-        if (type != null && (AccessTools.Property(type, "Active")?.GetValue(null) as bool? == true)) return true;
+        if (type != null && AccessTools.Property(type, "Active")?.GetValue(null) is true)
+        {
+            // The known relay gates WinRun before OnEnded. Confirm its ledger has no remaining leg.
+            try
+            {
+                var adapter = AccessTools.TypeByName("Sts2ModCompatibility.Mod.RelayLedgerAdapter");
+                var relay = AccessTools.TypeByName("Sts2ModCompatibility.Core.ActRelay");
+                var state = RunManager.Instance.DebugOnlyGetState();
+                if (adapter == null || relay == null || state == null) return true;
+                var ledger = AccessTools.Method(adapter, "Read").Invoke(null, [state]);
+                if (ledger != null && AccessTools.Property(ledger.GetType(), "Started")?.GetValue(ledger) is true &&
+                    (AccessTools.Property(ledger.GetType(), "BridgePending")?.GetValue(ledger) is true ||
+                     AccessTools.Method(relay, "Next").Invoke(null, [ledger]) != null)) return true;
+            }
+            catch (Exception ex) { GD.PushWarning("[STS2 LAN Co-op] 接力结局无法确认：" + ex.Message); return true; }
+        }
         var patches = Harmony.GetPatchInfo(AccessTools.Method(typeof(RunManager), nameof(RunManager.OnEnded)));
         // A foreign ending hook has no declared finality contract. Do not guess that its original call was the final ending.
         return patches != null && patches.Owners.Any(owner => owner != "sts2_lan_coop");
     }
-    public static void Complete(SerializableRun run, bool solo)
+    public static void Complete(SerializableRun run, bool solo, bool explicitEnd = false, string reason = "ended")
     {
-        if (HasUnresolvedEnding()) { GD.PushWarning("[STS2 LAN Co-op] 扩展接力结局未确认，保留续玩存档。"); return; }
+        if (!explicitEnd && !solo && !RunStateTrust.Trusted)
+        {
+            GD.PushWarning("[STS2 LAN Co-op] 本局已失步，结束通知不清理最近有效续玩归档；恢复或手动管理后再处理。");
+            return;
+        }
+        if (!explicitEnd && HasUnresolvedEnding()) { GD.PushWarning("[STS2 LAN Co-op] 扩展接力结局未确认，保留续玩存档。"); return; }
         var catalog = solo ? SoloLibrary.Catalog : SaveLibrary.Catalog;
         var key = Key(run);
-        var matching = catalog.Inspect().Where(i => i.Entry != null && (i.Entry.SourceKey == key ||
-            Key(SaveLibrary.Decode(catalog.ReadPayload(i.Entry))) == key)).Select(i => i.Entry!).ToArray();
-        foreach (var entry in matching) catalog.Retire(entry.Id, entry.Revision, "ended", key);
+        var matching = catalog.Inspect().Where(i => i.Entry != null && Matches(catalog, i.Entry, key)).Select(i => i.Entry!).ToArray();
+        if (matching.Length == 0 && !catalog.IsRetired("", key))
+            catalog.Retire(Guid.NewGuid().ToString("N"), null, reason, key);
+        foreach (var entry in matching) catalog.Retire(entry.Id, entry.Revision, reason, key);
+        catalog.RetryRetired();
         RemoveWorking(catalog, PathFor(!solo));
         if (solo) SoloLibrary.Ended(); else SaveLibrary.Ended();
+    }
+    private static bool Matches(RunCatalog catalog, RunEntry entry, string key)
+    {
+        if (entry.SourceKey.Length > 0) return entry.SourceKey == key;
+        try { return Key(SaveLibrary.Decode(catalog.ReadPayload(entry))) == key; }
+        catch (Exception ex)
+        {
+            GD.PushWarning("[STS2 LAN Co-op] 旧归档无法确认来源，保留此条目：" + entry.Id + "，" + ex.Message);
+            return false;
+        }
     }
 }
 
@@ -136,15 +168,54 @@ internal static class TrackNativeWorkingWrites
 internal static class RetireFinishedRun
 {
     private static void Prefix(RunManager __instance, out bool __state) => __state = __instance.ShouldSave &&
-        (RunStorage.Solo && __instance.DebugOnlyGetState()?.GameMode == GameMode.Standard || LanSession.Active && LanSession.HostedService != null);
-    private static void Postfix(bool __state, bool __runOriginal, SerializableRun __result)
+        AccessTools.Field(typeof(RunManager), "_runHistoryWasUploaded").GetValue(__instance) is not true &&
+        __instance.DebugOnlyGetState()?.GameMode == GameMode.Standard && (RunStorage.Solo || LanSession.Active);
+    private static void Postfix(RunManager __instance, bool isVictory, bool __state, bool __runOriginal, SerializableRun __result)
     {
         if (!__state || !__runOriginal || __result == null) return;
         var solo = __result.Players.Count == 1;
-        // Deletion of the native working slot is the successful native end commit, not merely a dead creature.
-        if (File.Exists(RunStorage.PathFor(!solo)) || File.Exists(RunStorage.PathFor(!solo) + ".backup")) return;
-        try { RunStorage.Complete(__result, solo); }
-        catch (Exception ex) { GD.PushError("[STS2 LAN Co-op] 已结算，归档清理未完成，保留记录以便重试：" + ex); }
+        if (solo || LanSession.Active)
+        {
+            if (!isVictory && !__instance.IsAbandoned)
+            {
+                if (__instance.DebugOnlyGetState()?.Players.All(p => p.Creature.IsDead) != true) return;
+                if (solo) SoloLibrary.FreezeEnding();
+                else if (LanSession.HostedService != null) SaveLibrary.FreezeEnding();
+                RunEndFlow.Begin(__result);
+                return;
+            }
+            if (!solo && LanSession.HostedService == null) return;
+            if (!__instance.IsAbandoned && RunStorage.HasUnresolvedEnding())
+            {
+                GD.PushWarning("[STS2 LAN Co-op] 最终结局尚无法确认，续玩归档保留，请在存档管理中处理。");
+                NativeUi.Notice(((SceneTree)Engine.GetMainLoop()).Root, "续玩存档已保留", "有模组修改了结束流程，暂时无法确认最终结局。请在存档管理中确认并删除本局存档。");
+                return;
+            }
+            if (solo) SoloLibrary.FreezeEnding(); else SaveLibrary.FreezeEnding();
+            _ = CompleteEnded(__result, solo, __instance.IsAbandoned ? "abandoned" : "victory");
+            return;
+        }
+    }
+    private static async Task CompleteEnded(SerializableRun run, bool solo, string reason)
+    {
+        var catalog = solo ? SoloLibrary.Catalog : SaveLibrary.Catalog;
+        var path = solo ? SoloLibrary.WorkingPath : SaveLibrary.WorkingPath;
+        try
+        {
+            // Persist retirement before yielding or disconnecting. A late writer checks this tombstone.
+            RunStorage.Complete(run, solo, explicitEnd: true, reason: reason);
+            if (SaveManager.Instance.CurrentRunSaveTask is { } pending)
+            {
+                try { await pending; }
+                catch (Exception ex) { GD.PushWarning("[STS2 LAN Co-op] 结束时保存失败，仍清理已确认终局：" + ex.Message); }
+            }
+            RunStorage.RemoveWorking(catalog, path);
+        }
+        catch (Exception ex)
+        {
+            GD.PushError("[STS2 LAN Co-op] 已结算，清理待重试：" + ex);
+            NativeUi.Notice(((SceneTree)Engine.GetMainLoop()).Root, "存档清理待重试", "本局已结束，存档清理未完成。请返回存档管理或重启重试。\n" + ex.Message);
+        }
     }
 }
 
@@ -168,7 +239,32 @@ internal static class RetireMenuAbandon
     private static void Postfix(SerializableRun? __state, bool __runOriginal)
     {
         if (!__runOriginal || __state == null || File.Exists(RunStorage.PathFor(false))) return;
-        try { RunStorage.Complete(__state, true); }
+        try { RunStorage.Complete(__state, true, explicitEnd: true, reason: "abandoned"); }
         catch (Exception ex) { GD.PushError("[STS2 LAN Co-op] 放弃后的清理未完成：" + ex); }
+    }
+}
+
+// Native multiplayer abandon disconnects the host BEFORE its asynchronous kill-all reaches OnEnded.
+// Capture authority and identity at the confirmed action, not from LanSession.Active at game over.
+[HarmonyPatch(typeof(RunManager), nameof(RunManager.Abandon))]
+internal static class RetireLanAbandon
+{
+    private static void Prefix(RunManager __instance, out SerializableRun? __state)
+    {
+        __state = null;
+        if (!LanSession.Active || LanSession.HostedService == null || !__instance.ShouldSave ||
+            __instance.DebugOnlyGetState()?.GameMode != GameMode.Standard) return;
+        __state = __instance.ToSave(null);
+    }
+    private static void Postfix(SerializableRun? __state, bool __runOriginal)
+    {
+        if (__state == null || !__runOriginal) return;
+        SaveLibrary.FreezeEnding();
+        try { RunStorage.Complete(__state, false, explicitEnd: true, reason: "abandoned"); }
+        catch (Exception ex)
+        {
+            GD.PushError("[STS2 LAN Co-op] 主机已放弃，归档清理待重试：" + ex);
+            NativeUi.Notice(((SceneTree)Engine.GetMainLoop()).Root, "存档清理待重试", "主机已确认放弃，本局归档清理未完成。\n" + ex.Message);
+        }
     }
 }

@@ -8,12 +8,13 @@ public sealed record PeerCapabilities
 {
     public string Platform { get; init; } = "";
     public int ReloadVersion { get; init; }
-    public bool CanReload => ReloadVersion == 2 && Platform is "Windows" or "Android";
+    public int RunStateVersion { get; init; }
+    public bool CanReload => ReloadVersion == 3 && Platform is "Windows" or "Android";
 }
 
 public sealed record AdmissionMessage
 {
-    public int Protocol { get; init; } = 5;
+    public int Protocol { get; init; } = 6;
     public PeerCapabilities Capabilities { get; init; } = new();
     public string Operation { get; init; } = "info";
     public string Error { get; init; } = "";
@@ -23,6 +24,7 @@ public sealed record AdmissionMessage
     public string Name { get; init; } = "";
     public bool Resume { get; init; }
     public bool Running { get; init; }
+    public bool RequiresRunState { get; init; }
     public int Count { get; init; }
     public int Act { get; init; }
     public int Floor { get; init; }
@@ -50,7 +52,7 @@ public static class AdmissionWire
     {
         if (!IsControl(data) || data.Length > 512 * 1024 + 4) throw new InvalidDataException("无效的联机控制报文。");
         var message = JsonSerializer.Deserialize<AdmissionMessage>(data.AsSpan(4)) ?? throw new InvalidDataException("控制报文为空。");
-        if (message.Protocol != 5) throw new InvalidDataException("联机协议版本不同，请所有玩家统一安装0.8.0-alpha.3或更新的同版Mod。");
+        if (message.Protocol != 6) throw new InvalidDataException("联机协议版本不同，请所有玩家统一安装0.8.0-alpha.8或更新的同版Mod。");
         return message;
     }
 }

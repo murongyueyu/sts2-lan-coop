@@ -21,7 +21,7 @@ public static class MobileModFiles
             if (!File.Exists(path)) continue;
             if (name.EndsWith(".json", StringComparison.Ordinal))
             {
-                using var doc = JsonDocument.Parse(ReadManifest(path));
+                using var doc = ModManifestJson.Parse(ReadManifest(path));
                 if (!IsManifest(doc.RootElement, id)) continue;
             }
             files.Add(ReadFile(path, name));
@@ -127,7 +127,7 @@ public static class MobileModFiles
 
     private static bool AliasMatches(SyncMod mod, SyncFile expected, string aliasPath, string cache)
     {
-        using var actual = JsonDocument.Parse(ReadManifest(aliasPath));
+        using var actual = ModManifestJson.Parse(ReadManifest(aliasPath));
         if (!IsManifest(actual.RootElement, mod.Id) ||
             !actual.RootElement.TryGetProperty(AliasMarker, out var marker) || marker.ValueKind != JsonValueKind.True ||
             expected.Size > MaxManifestBytes) return false;
@@ -151,7 +151,7 @@ public static class MobileModFiles
         }
         // Prove these are the host's bytes, even if the cached ZIP was modified.
         if (data.LongLength != expected.Size || ModSyncRules.Digest(data) != expected.Hash) return false;
-        using var original = JsonDocument.Parse(data);
+        using var original = ModManifestJson.Parse(data);
         if (!IsManifest(original.RootElement, mod.Id) || original.RootElement.TryGetProperty(AliasMarker, out _)) return false;
         return Canonical(original.RootElement, false).SequenceEqual(Canonical(actual.RootElement, true));
     }
@@ -165,7 +165,7 @@ public static class MobileModFiles
             if (data.LongLength != file.Size || ModSyncRules.Digest(data) != file.Hash)
                 throw new IOException("主机清单在核验后变化，请重启游戏：" + mod.Id);
             JsonDocument doc;
-            try { doc = JsonDocument.Parse(data); }
+            try { doc = ModManifestJson.Parse(data); }
             catch (JsonException) { continue; }
             using (doc)
             {

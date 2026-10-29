@@ -60,11 +60,14 @@ internal static class LanSession
         var block = GetBlockReason();
         if (block != null) throw new InvalidOperationException(block);
         RitsuNetworkInterop.Ensure();
+        NeuvilletteRunInterop.Ensure();
         Settings.Validate();
         Save();
         RunStorage.AcquireLanSlot();
         LocalId = id;
         Active = true;
+        RunStateTrust.Reset();
+        RunEndFlow.Reset();
         _generation++;
         AdmissionTransport.Reset();
         QuickReload.Reset();
@@ -73,8 +76,9 @@ internal static class LanSession
     public static NetHostGameService Host(NMultiplayerSubmenu menu, string? name = null, RunEntry? resume = null)
     {
         if (GetHostBlockReason() is { } blocked) throw new InvalidOperationException(blocked);
+        if (resume != null) NeuvilletteRunInterop.ValidateSave(SaveLibrary.Catalog.ReadPayload(resume));
         if (resume == null) SaveLibrary.New(name); else SaveLibrary.Select(resume);
-        var run = resume == null ? null : SaveLibrary.Decode(SaveLibrary.Catalog.ReadPayload(resume));
+        var run = resume == null ? null : SaveLibrary.Decode(SaveLibrary.Catalog.ReadPayload(resume), attachExtensions: true);
         if (run != null) run = RunManager.CanonicalizeSave(run, 1);
         Begin(1); // v0.107.1 ENetHost.NetId is natively fixed to 1.
         ResumeEntry = resume;
@@ -127,6 +131,8 @@ internal static class LanSession
         {
             onFlow(flow);
             var info = inspected ?? await AdmissionTransport.Request(menu.GetTree(), endpoint, new(), flow.CancelToken.Token);
+            if ((info.RequiresRunState || NeuvilletteRunInterop.Required) && info.Capabilities.RunStateVersion != 1)
+                throw new InvalidOperationException("房主版本不能完整恢复本局规则，请统一安装0.8.0-alpha.4或更新的同版完整包并重启。");
             if (info.Resume && !selectedSlot.HasValue)
                 throw new InvalidOperationException("请先查看房间并选择一个已有的客机角色。");
             var grant = await AdmissionTransport.Request(menu.GetTree(), endpoint, new()

@@ -3,7 +3,7 @@
 面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
 
 ![license](https://img.shields.io/badge/license-GPL--3.0-blue)
-![version](https://img.shields.io/badge/version-0.8.0--alpha.3-orange)
+![version](https://img.shields.io/badge/version-0.8.0--alpha.8-orange)
 ![game](https://img.shields.io/badge/game-v0.107.1%20%7C%20v0.111.0-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
@@ -52,6 +52,7 @@
 | 旧存档客机角色不好接 | 独立**角色接管卡片页**：主机锁定、已占用禁选、金色选中与卡组/遗物摘要，确认前复查并由主机最终预留 |
 | 单人也要快速SL和多存档 | 单人普通冒险独立**快速SL**、**单人多存档**与按局删除；每日/自定义模式保持原版 |
 | 保存后工作档报冲突 | 扩展追加写入不再误报；冲突时「处理工作档冲突」**先完整备份主档、backup 与租约，再恢复**，未知数据只留备份 |
+| 失败后只能重开 | 单人/LAN 失败后可**保留退出、读档重试或删除退出**；最终胜利或确认放弃时自动清理本局续玩存档 |
 | 改 Mod 就绕开校验 | 保留原版版本、玩法 Mod 与模型哈希检查，不静默忽略差异 |
 
 ## 截图
@@ -68,9 +69,17 @@
 
 ![工作档冲突恢复确认](images/conflict-recovery.png)
 
+![单人失败三选一](images/solo-defeat-choice.png)
+
+![LAN 主机失败三选一](images/lan-defeat-choice.png)
+
 ## 当前状态
 
 **alpha 开发版；Android 客机联机已支持并开放，跨网络整局与不同启动器版本仍以实际反馈为准。**
+
+- **0.8.0-alpha.8（当前）**：单人/LAN 失败后三选一——保留退出、读档重试、删除退出；最终胜利或确认放弃自动清理本局续玩存档。准入 6、SL 3，与 alpha.6 及更早版本不兼容，全员必须统一 alpha.8。另含 alpha.6 的 UTF-8 BOM 清单与 `v3.4.7` 依赖版本修复、alpha.4 的局内状态一致性与失步归档保护。
+
+- **0.8.0-alpha.6**：在 alpha.3 基础上修复旧 LAN 存档的续局／快速 SL／单人加载——Ritsu 与 JmcModLib 存档文档附着缺失、章节 4/3 进度差异、开局 `settings_sync` 丢失；检测到双端失步后保留有效归档，并阻止未知工作档在重启后自动导入；修复依赖版本号带 `v` 前缀（如 `v3.4.7` 对 BaseLib）被误判为「版本不满足要求」；修复 BaseLib 等 UTF-8 BOM 模组清单被跳过导致的「未找到可核验清单」。新增最近 160 条局内诊断。核心 86 项测试通过；准入5、SL2、同步2、Schema2 保持，但全员须统一 alpha.6。
 
 - **0.8.0-alpha.3**：原版风格 Steam/LAN 并列菜单、旧存档角色接管卡片、暂停菜单快速SL、单人快速SL与单人多存档、按局删除和终局清理；本版修复扩展保存后的工作档误报，新增显式确认的冲突恢复。核心77项、JMC/Ritsu 两进程78项、渲染UI27项通过，双版本 API 各173引用0缺失。
 

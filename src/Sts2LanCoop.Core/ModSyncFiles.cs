@@ -138,7 +138,7 @@ public static class ModSyncFiles
         foreach(var file in Directory.EnumerateFiles(root,"*.json",SearchOption.AllDirectories))
         {
             JsonDocument document;
-            try{document=JsonDocument.Parse(File.ReadAllBytes(file));}catch(JsonException){continue;}
+            try{document=ModManifestJson.Parse(File.ReadAllBytes(file));}catch(JsonException){continue;}
             using var doc=document;var json=doc.RootElement;
             if(json.ValueKind!=JsonValueKind.Object || !json.TryGetProperty("id",out var id) || id.ValueKind!=JsonValueKind.String)continue;
             if(!json.TryGetProperty("has_dll",out _) && !json.TryGetProperty("has_pck",out _))continue;

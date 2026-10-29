@@ -10,6 +10,13 @@ namespace Sts2LanCoop.Mod;
 
 internal static class GameBuild
 {
+    private static readonly PropertyInfo? CounterProperty = AccessTools.Property(typeof(MegaCrit.Sts2.Core.Random.Rng), "Counter");
+    private static readonly FieldInfo? CounterField = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Random.Rng), "_counter");
+    public static int RngCounter(MegaCrit.Sts2.Core.Random.Rng rng) => (int)(CounterProperty?.GetValue(rng) ?? CounterField?.GetValue(rng)
+        ?? throw new MissingMemberException("Rng counter"));
+    public static IEnumerable<MegaCrit.Sts2.Core.Models.CharacterModel> StartCharacters(object lobby) =>
+        ((IEnumerable)AccessTools.Property(lobby.GetType(), "Players").GetValue(lobby)!).Cast<object>().Select(p =>
+            (MegaCrit.Sts2.Core.Models.CharacterModel)(AccessTools.Field(p.GetType(), "character")?.GetValue(p) ?? AccessTools.Property(p.GetType(), "character").GetValue(p))!);
     public static string Version=>"v"+(MegaCrit.Sts2.Core.Debug.ReleaseInfoManager.Instance.ReleaseInfo?.Version??"unknown").TrimStart('v');
     public static bool Supported=>Version is "v0.107.1" or "v0.111.0";
     private static object Construct(Type type)

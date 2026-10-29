@@ -79,7 +79,7 @@ public static class WorkshopOrganization
     {
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(file));
+            using var doc = ModManifestJson.Parse(File.ReadAllBytes(file));
             var root = doc.RootElement;
             return root.ValueKind == System.Text.Json.JsonValueKind.Object &&
                 root.TryGetProperty("id", out var id) && id.ValueKind == System.Text.Json.JsonValueKind.String &&
