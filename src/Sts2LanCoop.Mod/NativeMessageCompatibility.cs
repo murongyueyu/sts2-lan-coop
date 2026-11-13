@@ -52,7 +52,7 @@ internal static class NativeMessageCompatibility
     {
         // v111 performs its own version/model/mod handshake before NetMessageBus traffic.
         // Its STS2 magic is not a MessageTypes ID. Keep it intact for HandshakeManager validation.
-        if (GameBuild.Version == "v0.111.0" && payload.AsSpan().StartsWith("STS2"u8)) return payload;
+        if ((GameBuild.Version is "v0.111.0" or "v0.113.0") && payload.AsSpan().StartsWith("STS2"u8)) return payload;
         // Hosts already use the canonical numbering, but log their received native type too.
         var result = _clientMap == null ? payload : outgoing ? _clientMap.ToHost(payload) : _clientMap.FromHost(payload);
         ref var count = ref (outgoing ? ref _sentLogs : ref _receivedLogs);

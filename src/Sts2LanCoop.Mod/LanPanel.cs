@@ -37,7 +37,7 @@ internal sealed class LanPanel
     private readonly UiAction _close;
     private readonly string? _hostBlock;
     private readonly string? _joinBlock;
-    private JoinFlow? _flow;
+    private CancellationTokenSource? _joinCancellation;
     private bool _busy;
     private bool _disposed;
 
@@ -112,7 +112,7 @@ internal sealed class LanPanel
         _target = _body;
         _status = Text(page == LanPage.Join ? "填写局域网、虚拟组网地址或外部UDP隧道地址。" : "", 22);
         _close = new UiAction(_layer.Footer, "返回", CloseOrCancel);
-        _layer.TreeExiting += () => { _disposed = true; _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); };
+        _layer.TreeExiting += () => { _disposed = true; _joinCancellation?.Cancel(); _requestCancel?.Cancel(); };
         ModSyncWorkflow.ShowPending(_menu, value => _address.Text = value, value => { if (!_disposed) _status!.Text = value; });
         WorkshopOrganizationWorkflow.ShowLastResult(value => { if (!_disposed) _status!.Text = value; });
         NativeUi.FocusLoop(_layer); _name.GrabFocus();
@@ -185,8 +185,8 @@ internal sealed class LanPanel
                 if (choice == null) { _status.Text = "已返回房间，尚未认领角色。"; return; }
                 _inspected = choice.Room; selectedSlot = choice.Slot;
             }
-            await LanSession.Join(_menu, endpoint!, flow => _flow = flow, selectedSlot, _inspected);
-            _flow = null;
+            await LanSession.Join(_menu, endpoint!, cancellation => _joinCancellation = cancellation, selectedSlot, _inspected);
+            _joinCancellation = null;
             _requestCancel?.Dispose(); _requestCancel = null;
             if (!_disposed) _layer.QueueFree();
         }
@@ -203,7 +203,7 @@ internal sealed class LanPanel
         }
         finally
         {
-            _flow = null;
+            _joinCancellation = null;
             _requestCancel?.Dispose(); _requestCancel=null;
             if (!_disposed) SetBusy(false);
         }
@@ -228,7 +228,7 @@ internal sealed class LanPanel
 
     private void CloseOrCancel()
     {
-        if (_busy) { _flow?.CancelToken.Cancel(); _requestCancel?.Cancel(); }
+        if (_busy) { _joinCancellation?.Cancel(); _requestCancel?.Cancel(); }
         else _layer.QueueFree();
     }
 

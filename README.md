@@ -3,11 +3,11 @@
 面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
 
 ![license](https://img.shields.io/badge/license-GPL--3.0-blue)
-![version](https://img.shields.io/badge/version-0.8.0--alpha.8-orange)
-![game](https://img.shields.io/badge/game-v0.107.1%20%7C%20v0.111.0-green)
+![version](https://img.shields.io/badge/version-0.8.0--alpha.9-orange)
+![game](https://img.shields.io/badge/game-v0.113.0-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **one DLL for both v0.107.1 and v0.111.0**. Native-style Steam/LAN menus, 4-player rooms, named multiplayer saves, saved-role takeover cards, pause-menu quick reload, solo reload and multi-save library, host mod synchronization, optional shared unlocks, and explicit working-save conflict recovery. All players in a room must run the same game and mod versions. Steam, offline (non-Steam) builds and Android guests are supported. GPL-3.0.
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **Windows v0.113.0 beta compatibility**. Native-style Steam/LAN menus, 4-player rooms, named multiplayer saves, saved-role takeover cards, pause-menu quick reload, solo reload and multi-save library, host mod synchronization, optional shared unlocks, and explicit working-save conflict recovery. All players in a room must run the same game and mod versions. Steam, offline (non-Steam) builds and Android guests are supported. GPL-3.0.
 
 ## 安装（下载即用）
 
@@ -47,7 +47,7 @@
 | 装了 Ritsu 系模组后开局黑屏/卡选角 | **Ritsu 扩展网络互通**：保留第三方扩展网络帧与接收顺序，保护旧大厅回调；不改第三方 DLL |
 | 玩模组版时原版解锁进度不生效 | **共用解锁**（可选、默认关闭）：加载模组进度时合并原版解锁，保存时导出新增解锁；对局、战绩与成就记录仍然各自独立 |
 | 不知道队友是谁 | 昵称随会话同步，显示当前实际操作者 |
-| 游戏更新后旧 Mod 失效 | **同一份 DLL 同时支持 v0.107.1 与 v0.111.0**，不用为两个游戏版本准备两份安装包；但同一房间内仍须使用相同游戏版本 |
+| 游戏更新后旧 Mod 失效 | **alpha.9 已验证 Windows v0.113.0 的普通合作**；同一房间内仍须使用相同游戏版本 |
 | 想要原版风格的联机入口 | **Steam 联机 / 局域网 · 直连**并列页签；LAN 页提供创建房间、加入房间、继续对局与联机设置 |
 | 旧存档客机角色不好接 | 独立**角色接管卡片页**：主机锁定、已占用禁选、金色选中与卡组/遗物摘要，确认前复查并由主机最终预留 |
 | 单人也要快速SL和多存档 | 单人普通冒险独立**快速SL**、**单人多存档**与按局删除；每日/自定义模式保持原版 |
@@ -77,7 +77,9 @@
 
 **alpha 开发版；Android 客机联机已支持并开放，跨网络整局与不同启动器版本仍以实际反馈为准。**
 
-- **0.8.0-alpha.8（当前）**：单人/LAN 失败后三选一——保留退出、读档重试、删除退出；最终胜利或确认放弃自动清理本局续玩存档。准入 6、SL 3，与 alpha.6 及更早版本不兼容，全员必须统一 alpha.8。另含 alpha.6 的 UTF-8 BOM 清单与 `v3.4.7` 依赖版本修复、alpha.4 的局内状态一致性与失步归档保护。
+- **0.8.0-alpha.9（当前）**：适配 v0.113.0 的联机菜单、入房和结算；通过 Windows 四人开局、The Fool 快速 SL、失败重试和模组同步验证。v0.107.1 / v0.111.0 和 Android 真机未复测，Blitz 与 Dread 未验收。
+
+- **0.8.0-alpha.8**：单人/LAN 失败后三选一——保留退出、读档重试、删除退出；最终胜利或确认放弃自动清理本局续玩存档。准入 6、SL 3，与 alpha.6 及更早版本不兼容，全员必须统一 alpha.8。另含 alpha.6 的 UTF-8 BOM 清单与 `v3.4.7` 依赖版本修复、alpha.4 的局内状态一致性与失步归档保护。
 
 - **0.8.0-alpha.6**：在 alpha.3 基础上修复旧 LAN 存档的续局／快速 SL／单人加载——Ritsu 与 JmcModLib 存档文档附着缺失、章节 4/3 进度差异、开局 `settings_sync` 丢失；检测到双端失步后保留有效归档，并阻止未知工作档在重启后自动导入；修复依赖版本号带 `v` 前缀（如 `v3.4.7` 对 BaseLib）被误判为「版本不满足要求」；修复 BaseLib 等 UTF-8 BOM 模组清单被跳过导致的「未找到可核验清单」。新增最近 160 条局内诊断。核心 86 项测试通过；准入5、SL2、同步2、Schema2 保持，但全员须统一 alpha.6。
 
@@ -86,7 +88,7 @@
 - 已在本机以真实引擎 + 四个独立游戏进程验证到首个 MapRoom，并覆盖满员拒绝、端口占用、取消、准备同步、存档与快速 SL。
 - 主机模组同步已实现同端口版本包传输、完整文件校验、进度/取消/断点缓存、退出后事务式应用与恢复；**自动应用为 Windows 专用**，Android 客机可比较、下载主机包到本机缓存，退出后用启动器手动导入。
 - 共用解锁默认关闭，只作用于当前账号同编号存档栏，关闭开关**不会撤销**已合并的进度；开启前请确保已备份。
-- 单 DLL 双版本：同一份 DLL 在 v0.107.1 与 v0.111.0 上加载，运行时探测接口差异；**两个版本之间不能互联**，命名存档记录来源游戏版本，不跨版本强载载荷。
+- alpha.8 的单 DLL 双版本记录：同一份 DLL 在 v0.107.1 与 v0.111.0 上加载，运行时探测接口差异；**两个版本之间不能互联**，命名存档记录来源游戏版本，不跨版本强载载荷。
 - **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透与完整一局的跨设备、跨网络验收仍在进行；Android 客机联机已支持。
 - **现已支持 Android（Sts2MobileLauncher）客机联机**：手机可查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较、下载主机模组包后手动导入；手机端需同游戏版本与同 Mod 版本。手机建房、共用解锁与模组自动应用仍仅 Windows。
 - 不依赖 Steam 联机服务：正版 Steam、离线/非 Steam 构建与 Android 客机都可尝试；离线构建未逐版本验收，本 Mod 不含破解或绕过 DRM 内容。

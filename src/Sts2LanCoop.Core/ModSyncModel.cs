@@ -50,7 +50,7 @@ public static class ModSyncRules
     public static readonly string[] ConflictingIds = ["QuickSL", "sts2_lan_connect", "LanSpire", "DirectConnectIP", "AutoModSubscriber"];
     public static HashSet<string> Required(SyncProfile host)
     {
-        if (host.Schema != 1 || host.Game is not ("v0.107.1" or "v0.111.0") || host.Platform != "Windows-x64" || host.Mods.Count > 1024 ||
+        if (host.Schema != 1 || !SupportedGameVersions.Contains(host.Game) || host.Platform != "Windows-x64" || host.Mods.Count > 1024 ||
             host.Mods.Any(m => string.IsNullOrWhiteSpace(m.Id) || m.Id.Length>160) || host.Mods.Select(m=>m.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=host.Mods.Count)
             throw new InvalidDataException("主机模组清单格式、游戏或平台不受支持。");
         var required = host.Mods.Where(m=>m.Gameplay || m.Id==CoreId).Select(m=>m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);

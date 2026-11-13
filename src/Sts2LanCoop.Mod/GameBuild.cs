@@ -1,6 +1,9 @@
 using System.Collections;
 using System.Reflection;
+using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Multiplayer.Connection;
+using Sts2LanCoop.Core;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
@@ -18,7 +21,7 @@ internal static class GameBuild
         ((IEnumerable)AccessTools.Property(lobby.GetType(), "Players").GetValue(lobby)!).Cast<object>().Select(p =>
             (MegaCrit.Sts2.Core.Models.CharacterModel)(AccessTools.Field(p.GetType(), "character")?.GetValue(p) ?? AccessTools.Property(p.GetType(), "character").GetValue(p))!);
     public static string Version=>"v"+(MegaCrit.Sts2.Core.Debug.ReleaseInfoManager.Instance.ReleaseInfo?.Version??"unknown").TrimStart('v');
-    public static bool Supported=>Version is "v0.107.1" or "v0.111.0";
+    public static bool Supported=>SupportedGameVersions.Contains(Version);
     private static object Construct(Type type)
     {
         var empty=type.GetConstructor(Type.EmptyTypes);if(empty!=null)return empty.Invoke(null);
@@ -27,10 +30,24 @@ internal static class GameBuild
         return ctor.Invoke([info]);
     }
     public static NetHostGameService Host()=>(NetHostGameService)Construct(typeof(NetHostGameService));
-    public static JoinFlow Join()
+    private static readonly MethodInfo? LegacyJoinBegin = typeof(JoinFlow).GetMethod(
+        nameof(JoinFlow.Begin), [typeof(IClientConnectionInitializer), typeof(SceneTree)]);
+
+    public static JoinFlow Join(IClientConnectionInitializer initializer)
     {
-        var empty=typeof(JoinFlow).GetConstructor(Type.EmptyTypes);
-        return empty!=null?(JoinFlow)empty.Invoke(null):(JoinFlow)Activator.CreateInstance(typeof(JoinFlow),Construct(typeof(NetClientGameService)))!;
+        var empty = typeof(JoinFlow).GetConstructor(Type.EmptyTypes);
+        if (empty != null) return (JoinFlow)empty.Invoke(null);
+        var client = Construct(typeof(NetClientGameService));
+        return (JoinFlow)(LegacyJoinBegin != null
+            ? Activator.CreateInstance(typeof(JoinFlow), client)!
+            : Activator.CreateInstance(typeof(JoinFlow), client, initializer)!);
+    }
+
+    public static Task<JoinResult> BeginJoin(JoinFlow flow, IClientConnectionInitializer initializer, SceneTree tree)
+    {
+        var method = LegacyJoinBegin ?? typeof(JoinFlow).GetMethod(nameof(JoinFlow.Begin), [typeof(SceneTree)])
+            ?? throw new MissingMethodException(nameof(JoinFlow), nameof(JoinFlow.Begin));
+        return (Task<JoinResult>)method.Invoke(flow, LegacyJoinBegin != null ? [initializer, tree] : [tree])!;
     }
     public static INetClientGameService Service(JoinFlow flow)=>(INetClientGameService)typeof(JoinFlow).GetProperty("NetService")!.GetValue(flow)!;
     public static IEnumerable<Assembly> Assemblies(MegaCrit.Sts2.Core.Modding.Mod mod)

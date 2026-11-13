@@ -32,7 +32,7 @@ internal static class LanSession
     {
         var version = MegaCrit.Sts2.Core.Debug.ReleaseInfoManager.Instance.ReleaseInfo?.Version;
         if (!GameBuild.Supported)
-            return $"当前游戏版本 {version ?? "未知"}，此DLL支持v0.107.1和v0.111.0。";
+            return $"当前游戏版本 {version ?? "未知"}，此DLL支持 {SupportedGameVersions.Display}。";
         if (AppDomain.CurrentDomain.GetAssemblies().Any(a=>a.GetName().Name == "QuickSL"))
             return "本版已内置全员快速SL。请禁用外部QuickSL并重启，再建立LAN会话，避免两套重载同时执行。";
         var conflict = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a =>
@@ -115,7 +115,7 @@ internal static class LanSession
         }
     }
 
-    public static async Task Join(NMultiplayerSubmenu menu, Endpoint endpoint, Action<JoinFlow> onFlow,
+    public static async Task Join(NMultiplayerSubmenu menu, Endpoint endpoint, Action<CancellationTokenSource> onCancellation,
         ulong? selectedSlot = null, AdmissionMessage? inspected = null)
     {
         if (QuickReload.Busy) throw new InvalidOperationException("请等待本次SL及恢复结束后再入房。");
@@ -124,13 +124,13 @@ internal static class LanSession
         SaveLibrary.ImportWorking();
         Begin(Settings.PlayerId);
         var generation = _generation;
-        var flow = GameBuild.Join();
-        flow.CancelToken.CancelAfter(TimeSpan.FromSeconds(20));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        JoinFlow? flow = null;
         var transferred = false;
         try
         {
-            onFlow(flow);
-            var info = inspected ?? await AdmissionTransport.Request(menu.GetTree(), endpoint, new(), flow.CancelToken.Token);
+            onCancellation(cancellation);
+            var info = inspected ?? await AdmissionTransport.Request(menu.GetTree(), endpoint, new(), cancellation.Token);
             if ((info.RequiresRunState || NeuvilletteRunInterop.Required) && info.Capabilities.RunStateVersion != 1)
                 throw new InvalidOperationException("房主版本不能完整恢复本局规则，请统一安装0.8.0-alpha.4或更新的同版完整包并重启。");
             if (info.Resume && !selectedSlot.HasValue)
@@ -141,14 +141,18 @@ internal static class LanSession
                 NativeMessages = NativeMessageCompatibility.Capture(),
                 Capabilities = LanCapability.Capabilities,
                 Person = Settings.PlayerId, Name = Settings.PlayerName, Slot = selectedSlot ?? Settings.PlayerId
-            }, flow.CancelToken.Token);
+            }, cancellation.Token);
             LocalId = grant.Slot;
             AdmissionTransport.AcceptHost(info.Session);
             NativeMessageCompatibility.AcceptHost(grant.NativeMessages);
             AdmissionTransport.ClaimToken = grant.Token;
             AdmissionTransport.SetNames(grant.Names);
             AdmissionTransport.Names[LocalId.ToString()] = Settings.PlayerName;
-            var result = await flow.Begin(new ENetClientConnectionInitializer(LocalId, endpoint.Host, endpoint.Port), menu.GetTree());
+            cancellation.Token.ThrowIfCancellationRequested();
+            var initializer = new ENetClientConnectionInitializer(LocalId, endpoint.Host, endpoint.Port);
+            flow = GameBuild.Join(initializer);
+            using var cancelNativeJoin = cancellation.Token.Register(flow.CancelToken.Cancel);
+            var result = await GameBuild.BeginJoin(flow, initializer, menu.GetTree());
             if (result.gameMode != GameMode.Standard) throw new InvalidOperationException("仅支持普通合作对局。");
             if (result.sessionState == RunSessionState.InLobby && result.joinResponse.HasValue && !info.Resume)
             {
@@ -174,10 +178,13 @@ internal static class LanSession
         {
             if (!transferred)
             {
-                GameBuild.Service(flow)?.Disconnect(NetError.CancelledJoin, now: true);
-                End();
+                try
+                {
+                    if (flow != null) GameBuild.Service(flow).Disconnect(NetError.CancelledJoin, now: true);
+                }
+                finally { End(); }
             }
-            flow.CancelToken.Dispose();
+            flow?.CancelToken.Dispose();
         }
     }
 

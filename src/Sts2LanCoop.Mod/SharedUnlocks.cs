@@ -114,7 +114,7 @@ internal static class SharedUnlocks
         if(_busy)return;
         if(!UserDataPathProvider.IsRunningModded)throw new InvalidOperationException("当前不是有模组的存档环境。");
         var schema=SaveManager.Instance.GetLatestSchemaVersion<SerializableProgress>();
-        if(!GameBuild.Supported||schema!=(GameBuild.Version=="v0.111.0"?24:21))throw new InvalidOperationException("当前游戏进度格式未适配。");
+        if(!GameBuild.Supported||schema!=(GameBuild.Version=="v0.107.1"?21:24))throw new InvalidOperationException("当前游戏进度格式未适配。");
         using(var currentProcess=Process.GetCurrentProcess())
         {
             var peers=Process.GetProcessesByName(currentProcess.ProcessName);

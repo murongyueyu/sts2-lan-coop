@@ -170,10 +170,12 @@ internal static class RetireFinishedRun
     private static void Prefix(RunManager __instance, out bool __state) => __state = __instance.ShouldSave &&
         AccessTools.Field(typeof(RunManager), "_runHistoryWasUploaded").GetValue(__instance) is not true &&
         __instance.DebugOnlyGetState()?.GameMode == GameMode.Standard && (RunStorage.Solo || LanSession.Active);
-    private static void Postfix(RunManager __instance, bool isVictory, bool __state, bool __runOriginal, SerializableRun __result)
+    private static void Postfix(RunManager __instance, bool isVictory, bool __state, bool __runOriginal, object? __result)
     {
         if (!__state || !__runOriginal || __result == null) return;
-        var solo = __result.Players.Count == 1;
+        var run = __result as SerializableRun ?? AccessTools.Field(__result.GetType(), "run")?.GetValue(__result) as SerializableRun;
+        if (run == null) return;
+        var solo = run.Players.Count == 1;
         if (solo || LanSession.Active)
         {
             if (!isVictory && !__instance.IsAbandoned)
@@ -181,7 +183,7 @@ internal static class RetireFinishedRun
                 if (__instance.DebugOnlyGetState()?.Players.All(p => p.Creature.IsDead) != true) return;
                 if (solo) SoloLibrary.FreezeEnding();
                 else if (LanSession.HostedService != null) SaveLibrary.FreezeEnding();
-                RunEndFlow.Begin(__result);
+                RunEndFlow.Begin(run);
                 return;
             }
             if (!solo && LanSession.HostedService == null) return;
@@ -192,7 +194,7 @@ internal static class RetireFinishedRun
                 return;
             }
             if (solo) SoloLibrary.FreezeEnding(); else SaveLibrary.FreezeEnding();
-            _ = CompleteEnded(__result, solo, __instance.IsAbandoned ? "abandoned" : "victory");
+            _ = CompleteEnded(run, solo, __instance.IsAbandoned ? "abandoned" : "victory");
             return;
         }
     }

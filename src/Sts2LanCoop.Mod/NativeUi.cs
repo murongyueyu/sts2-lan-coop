@@ -1,4 +1,5 @@
 using Godot;
+using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.PauseMenu;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
@@ -83,10 +84,17 @@ internal static class NativeUi
     public static NSubmenuButton Card(Node parent, string name, string title, string description, string icon, Action action)
     {
         var card = GD.Load<PackedScene>("res://scenes/ui/submenu_button.tscn").Instantiate<NSubmenuButton>();
-        card.Name = name; parent.AddChild(card); card.SetIconAndLocalization("HOST");
+        card.Name = name;
+        parent.AddChild(card);
+        if (AccessTools.Method(typeof(NSubmenuButton), "SetIcon", [typeof(string)]) is { } setIcon)
+            setIcon.Invoke(card, [icon]);
+        else
+        {
+            AccessTools.Method(typeof(NSubmenuButton), "SetIconAndLocalization", [typeof(string)]).Invoke(card, ["HOST"]);
+            card.GetNode<TextureRect>("Icon").Texture = GD.Load<Texture2D>($"res://images/ui/main_menu/submenu_{icon}.png");
+        }
         card.GetNode<MegaLabel>("%Title").SetTextAutoSize(title);
         card.GetNode<MegaRichTextLabel>("%Description").Text = description;
-        card.GetNode<TextureRect>("Icon").Texture = GD.Load<Texture2D>($"res://images/ui/main_menu/submenu_{icon}.png");
         card.Connect(NClickableControl.SignalName.Released, Callable.From<Control>(_ => action()));
         return card;
     }
