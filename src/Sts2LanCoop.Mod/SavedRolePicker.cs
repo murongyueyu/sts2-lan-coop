@@ -81,7 +81,9 @@ internal sealed class SavedRolePicker
             card.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft);
             card.CustomMinimumSize = new Vector2(width, 430); card.Size = card.CustomMinimumSize;
             card.SetMeta("saved_slot", slot.NativeId.ToString());
-            var portrait = card.GetNode<TextureRect>("Icon");
+            // v0.114.0 moved the portrait and its lock into %SubmenuPortrait; older scenes use Icon and %Lock.
+            var legacyPortrait = card.GetNodeOrNull<TextureRect>("Icon");
+            var portrait = legacyPortrait ?? card.GetNode<TextureRect>("%SubmenuPortrait");
             Place(portrait, new Vector2(20, 16), new Vector2(width - 40, 190));
             portrait.Texture = Portrait(slot);
             var title = card.GetNode<MegaLabel>("%Title");
@@ -91,8 +93,9 @@ internal sealed class SavedRolePicker
             description.BbcodeEnabled = false;
             Place(description, new Vector2(14, 265), new Vector2(width - 28, 155));
             description.Text = Description(slot);
-            var locked = card.GetNode<TextureRect>("%Lock");
-            Place(locked, new Vector2(width - 50, 24), new Vector2(28, 28));
+            if (legacyPortrait != null)
+                Place(card.GetNode<TextureRect>("%Lock"), new Vector2(width - 50, 24), new Vector2(28, 28));
+            else FitTallCard(card, portrait, width);
             var allowed = !_stale && SavedRoleChoice.CanSelect(_room, slot.NativeId);
             card.SetEnabled(allowed);
             var selected = _selected == slot.NativeId;
@@ -168,6 +171,19 @@ internal sealed class SavedRolePicker
     }
     private static void Place(Control node, Vector2 position, Vector2 size)
     { node.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft); node.Position = position; node.Size = size; }
+    // The v0.114.0 scene is sized for a 705px tall menu card; shrink its fixed-size children to the role card.
+    private static void FitTallCard(NSubmenuButton card, TextureRect portrait, float width)
+    {
+        var panel = card.GetNode<TextureRect>("BgPanel");
+        panel.CustomMinimumSize = Vector2.Zero;
+        Place(panel, Vector2.Zero, new Vector2(width, 430));
+        portrait.Scale = Vector2.One;
+        portrait.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+        portrait.GetNode<TextureRect>("Frame").Visible = false;
+        var locked = portrait.GetNode<TextureRect>("Lock");
+        locked.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+        Place(locked, new Vector2(portrait.Size.X - 44, 6), new Vector2(40, 30));
+    }
     private static Texture2D Portrait(SlotSummary slot)
     {
         try
