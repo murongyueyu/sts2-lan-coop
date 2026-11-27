@@ -21,6 +21,13 @@ internal static class MobileModSync
         var diff = ModSyncRules.Compare(host, local, GameBuild.Version);
         if (diff.Errors.Count > 0) throw new InvalidOperationException(string.Join("\n", diff.Errors));
         var report = WriteReport(host, local, diff);
+        if (host.Platform == ModSyncRules.AndroidPlatform)
+        {
+            progress(diff.Matches ? "主要模组文件与手机房主一致；进房时继续执行原版内容校验。" :
+                "手机房主不分发模组，请按以下差异手动调整后重启再连接：\n" + string.Join("\n", diff.Changes.Select(c =>
+                    $"{ActionName(c.Action)} {c.Name} [{c.Id}]：{c.Reason}")) + "\n完整差异报告：" + report);
+            return diff.Matches;
+        }
         // Old imports can now pass verification while still sharing a directory.
         // The download button may offer foldered copies; Join never requires this.
         var sharedIds = local.Where(m => m.Loaded).GroupBy(m => m.Directory, StringComparer.Ordinal)
@@ -102,7 +109,7 @@ internal static class MobileModSync
         }).ToArray();
         File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
         {
-            Version = "0.8.0-alpha.11", HostRevision = host.Revision, comparison.Matches,
+            Version = "0.9.0-alpha.3", HostRevision = host.Revision, comparison.Matches,
             comparison.Errors, comparison.Changes, Mods = entries
         }, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print("[STS2 LAN Co-op] Android mod comparison: " + (comparison.Matches ? "matched" : "different") + "; report=" + path);

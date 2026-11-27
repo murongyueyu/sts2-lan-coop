@@ -22,6 +22,12 @@ internal static class ModSyncWorkflow
         var comparison=ModSyncRules.Compare(profile,local,GameBuild.Version);
         if(comparison.Errors.Count>0)throw new InvalidOperationException(string.Join("\n",comparison.Errors));
         if(comparison.Matches){progress("模组与主机一致，兼容的个人美化已保留。");return true;}
+        if(profile.Platform==ModSyncRules.AndroidPlatform)
+        {
+            progress("手机房主不分发模组，请按以下差异手动调整后重启再连接：\n"+string.Join("\n",
+                comparison.Changes.Select(c=>$"{ActionName(c.Action)} {c.Name} [{c.Id}] {c.Target?.Version??c.Local?.Version}：{c.Reason}")));
+            return false;
+        }
         var changes=string.Join("\n",comparison.Changes.Select(c=>$"{ActionName(c.Action)} {c.Name} [{c.Id}] {c.Target?.Version??c.Local?.Version}：{c.Reason}"));
         if(comparison.Changes.All(c=>c.Action is "enable" or "disable"))
         {

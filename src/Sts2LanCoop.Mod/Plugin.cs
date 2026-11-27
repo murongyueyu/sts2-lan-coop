@@ -17,8 +17,9 @@ public static class Plugin
             harmony.PatchAll(typeof(Plugin).Assembly);
             ((SceneTree)Engine.GetMainLoop()).Root.CallDeferred(Node.MethodName.AddChild, new LanMobileLifecycle { Name = "LanMobileLifecycle" });
             ((SceneTree)Engine.GetMainLoop()).ProcessFrame += QuickReload.Tick;
+            ((SceneTree)Engine.GetMainLoop()).ProcessFrame += HostDiagnostics.Tick;
             // 平台日志供期0真机核查OS.GetName()/OS.GetVersion()的实际返回值。
-            GD.Print($"[STS2 LAN Co-op] 0.8.0-alpha.11 loaded on {LanCapability.Platform} {OS.GetVersion()}; one DLL supports {Sts2LanCoop.Core.SupportedGameVersions.Display}; admission 6, SL 3, mod sync 2.");
+            GD.Print($"[STS2 LAN Co-op] 0.9.0-alpha.3 loaded on {LanCapability.Platform} {OS.GetVersion()}; one DLL supports {Sts2LanCoop.Core.SupportedGameVersions.Display}; admission 6, SL 3, mod sync 2.");
             GD.Print($"[STS2 LAN Co-op] capabilities: join={Allowed(LanCapability.JoinBlockReason)}, host={Allowed(LanCapability.HostBlockReason)}, SL={Allowed(LanCapability.QuickReloadBlockReason)}, mod packages={LanCapability.CanInspectMods}, auto apply={Allowed(LanCapability.ModSyncBlockReason)}.");
         }
         catch

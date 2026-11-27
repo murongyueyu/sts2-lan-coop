@@ -81,6 +81,11 @@ internal sealed class LanPanel
         _shareMods.AddThemeFontSizeOverride("font_size", 24);
         _shareMods.AddThemeColorOverride("font_color", new Color("382410"));
         _target.AddChild(_shareMods);
+        if (LanCapability.Android)
+        {
+            _shareMods.ButtonPressed = false; _shareMods.Disabled = true;
+            Text("手机房主（试验功能）：不分发模组，朋友需自行装好相同模组。开房、对局和快速SL时请让游戏保持在前台。", 20);
+        }
         Text("创建后，在大厅选择角色并等待朋友加入。", 22);
         _host = Button("创建房间", Host); _host.Disabled = _hostBlock != null;
         if (_hostBlock != null) Text(_hostBlock, 20);
@@ -136,7 +141,8 @@ internal sealed class LanPanel
             throw new InvalidDataException("昵称应为 1–24 个字符，不能包含控制字符。");
         LanSession.Settings.PlayerName = name;
         LanSession.Settings.HostPort = port;
-        LanSession.Settings.ShareMods = _shareMods.ButtonPressed;
+        // 手机上该开关固定关闭，不覆盖玩家原有设置。
+        if (!LanCapability.Android) LanSession.Settings.ShareMods = _shareMods.ButtonPressed;
         _ = ReloadShortcut.Parse(_reloadKey.Text);
         LanSession.Settings.QuickReloadHotkey = _reloadKey.Text.Trim();
         LanSession.Save();
@@ -222,7 +228,7 @@ internal sealed class LanPanel
         _name.Editable = _port.Editable = _address.Editable = !busy;
         _runName.Editable = !busy;
         _reloadKey.Editable = !busy;
-        _shareMods.Disabled = busy || _hostBlock != null;
+        _shareMods.Disabled = busy || _hostBlock != null || LanCapability.Android;
         _close.Text = busy ? "取消连接" : "返回";
     }
 

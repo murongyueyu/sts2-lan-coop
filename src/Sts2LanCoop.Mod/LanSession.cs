@@ -76,6 +76,8 @@ internal static class LanSession
     public static NetHostGameService Host(NMultiplayerSubmenu menu, string? name = null, RunEntry? resume = null)
     {
         if (GetHostBlockReason() is { } blocked) throw new InvalidOperationException(blocked);
+        // 手机建房或续局前先确认存档目录可写，避免开局后才发现无法归档。
+        LanMobileLifecycle.ProbeSaveAccess();
         if (resume != null) NeuvilletteRunInterop.ValidateSave(SaveLibrary.Catalog.ReadPayload(resume));
         if (resume == null) SaveLibrary.New(name); else SaveLibrary.Select(resume);
         var run = resume == null ? null : SaveLibrary.Decode(SaveLibrary.Catalog.ReadPayload(resume), attachExtensions: true);
@@ -89,6 +91,7 @@ internal static class LanSession
             var error = host.StartENetHost(Settings.HostPort, LanSettings.MaximumPlayers);
             if (error.HasValue) throw new InvalidOperationException($"建房失败：{error.Value}。请检查 UDP 端口是否被占用。");
             HostedService = host;
+            LanMobileLifecycle.HostingStarted();
             ModSyncTransport.Warm();
             host.Disconnected += _ => { if (_generation == generation) End(); };
             if (run == null)
@@ -190,6 +193,7 @@ internal static class LanSession
 
     private static void End()
     {
+        LanMobileLifecycle.HostingEnded();
         Active = false;
         LocalId = 0;
         HostedService = null;

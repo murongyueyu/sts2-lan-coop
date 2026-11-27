@@ -20,9 +20,7 @@ internal static class LanCapability
     public static string? JoinBlockReason => LanPlatform.CanJoin(Kind) ? null :
         $"此开发版仅在 Windows 和 Android 提供连接入口（当前系统：{Platform}）。";
     public static string? HostBlockReason => LanPlatform.CanHost(Kind) ? null :
-        Kind == LanPlatformKind.Android
-            ? "手机做房主需要长期监听固定 UDP 端口，手机网络通常不可达；本期只开放客机加入。"
-            : $"此开发版仅在 Windows 提供建房入口（当前系统：{Platform}）。";
+        $"此开发版仅在 Windows 和 Android 提供建房入口（当前系统：{Platform}）。";
     public static string? ModSyncBlockReason => LanPlatform.CanSyncMods(Kind) ? null :
         Android ? "当前支持比较/下载，尚无启动前应用接口；请退出后使用启动器手动导入兼容包。" :
         $"当前平台{Platform}不支持模组自动应用。";

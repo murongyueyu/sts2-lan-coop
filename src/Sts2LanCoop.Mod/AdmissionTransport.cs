@@ -29,6 +29,7 @@ internal static class AdmissionTransport
     private static readonly Dictionary<ENetPacketPeer, ulong> Pending = [];
     private static ulong _lastBroadcast;
     private static int _emptyPackets;
+    internal static int Updates, ConnectEvents, DisconnectEvents, ReceiveEvents;
     private static readonly System.Reflection.FieldInfo Connection = AccessTools.Field(typeof(ENetHost), "_connection");
     private static readonly System.Reflection.MethodInfo Receive = AccessTools.Method(typeof(ENetHost), "HandlePacketReceived");
     private static readonly System.Reflection.MethodInfo Handshake = AccessTools.Method(typeof(ENetHost), "DoClientHandshake");
@@ -142,10 +143,14 @@ internal static class AdmissionTransport
 
     public static void Update(ENetHost host)
     {
+        Updates++;
         if (Connection.GetValue(host) is not ENetConnection connection) return;
         for (var i = 0; i < 256 && connection.TryService(out var result); i++)
         {
             var data = result!.Value;
+            if (data.type == ENetConnection.EventType.Connect) ConnectEvents++;
+            else if (data.type == ENetConnection.EventType.Disconnect) DisconnectEvents++;
+            else if (data.type == ENetConnection.EventType.Receive) ReceiveEvents++;
             if (data.type == ENetConnection.EventType.Connect)
             { Pending[data.peer] = Time.GetTicksMsec(); continue; }
             if (data.type == ENetConnection.EventType.Disconnect)

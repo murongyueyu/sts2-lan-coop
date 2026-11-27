@@ -110,6 +110,8 @@ internal static class QuickReload
         {
             if (BlockReason(ignoreBusy: true, ending: ending) is { } initialBlock) throw new InvalidOperationException(initialBlock);
             CheckHostPlayers(); ReloadUi.Progress("检查当前保存点……", cancel: null);
+            // 手机主机与客机一样，先确认存档目录可写，再进入会清理当前场景的流程。
+            LanMobileLifecycle.ProbeSaveAccess();
             await SaveLibrary.EnsureSaved(frozenCheckpoint: ending.Length > 0);
             CheckHostPlayers();
             var entry = SaveLibrary.ActiveEntry!;

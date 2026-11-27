@@ -3,11 +3,11 @@
 面向《杀戮尖塔 2》（Slay the Spire 2）的**局域网 / 地址直连四人合作 Mod**。让最多四名玩家通过实体局域网、虚拟组网（Radmin）或 UDP 穿透（樱花）进入同一个合作房间。
 
 ![license](https://img.shields.io/badge/license-GPL--3.0-blue)
-![version](https://img.shields.io/badge/version-0.8.0--alpha.11-orange)
-![game](https://img.shields.io/badge/game-v0.114.0-green)
+![version](https://img.shields.io/badge/version-0.9.0--alpha.3-orange)
+![game](https://img.shields.io/badge/game-v0.111.1%20%7C%20v0.114.0-green)
 ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **Windows v0.114.0 compatibility** (older builds remain listed but were not retested). Native-style Steam/LAN menus, 4-player rooms, named multiplayer saves, saved-role takeover cards, pause-menu quick reload, solo reload and multi-save library, host mod synchronization, optional shared unlocks, and explicit working-save conflict recovery. All players in a room must run the same game and mod versions. Steam, offline (non-Steam) builds and Android guests are supported. GPL-3.0.
+> English: a LAN / direct-IP co-op mod for *Slay the Spire 2*, **game v0.111.1 and v0.114.0** (older builds remain listed but were not retested), **experimental Android hosting**. Native-style Steam/LAN menus, 4-player rooms, named multiplayer saves, saved-role takeover cards, pause-menu quick reload, solo reload and multi-save library, host mod synchronization, optional shared unlocks, and explicit working-save conflict recovery. All players in a room must run the same game and mod versions. Steam, offline (non-Steam) builds and Android guests are supported. Android hosting is experimental: resume and quick reload on a phone host are untested. GPL-3.0.
 
 ## 安装（下载即用）
 
@@ -39,7 +39,7 @@
 | 问题 | 本项目提供的做法 |
 | --- | --- |
 | 原版只有 Steam 联机 | IPv4 / 域名直连，可配置 UDP 监听端口、复制网卡与樱花外部地址、记住最近成功连接 |
-| 想在手机上和朋友一起玩 | **Android（Sts2MobileLauncher）客机联机**：查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较/下载主机模组包后手动导入 |
+| 想在手机上和朋友一起玩 | **Android（Sts2MobileLauncher）**：作为客机加入、参与全员快速 SL、比较/下载主机模组包后手动导入；0.9.0 起**试验性支持手机做房主**（建房、续局、快速 SL，不分发模组） |
 | 一局结束就得重开 | 每局独立命名存档 + 「继续多人对局」列表，可重命名后接着打 |
 | 朋友退坑后存档就废了 | 客机可**接替**离线朋友的角色，或彼此**互换**；进度完整保留，不需要原朋友在线 |
 | 打崩了要全员重开房间 | 「快速 SL · 全员重载」：暂停菜单一键或 `Ctrl+F8`，**保留连接和当前角色**回到最近保存点 |
@@ -47,7 +47,7 @@
 | 装了 Ritsu 系模组后开局黑屏/卡选角 | **Ritsu 扩展网络互通**：保留第三方扩展网络帧与接收顺序，保护旧大厅回调；不改第三方 DLL |
 | 玩模组版时原版解锁进度不生效 | **共用解锁**（可选、默认关闭）：加载模组进度时合并原版解锁，保存时导出新增解锁；对局、战绩与成就记录仍然各自独立 |
 | 不知道队友是谁 | 昵称随会话同步，显示当前实际操作者 |
-| 游戏更新后旧 Mod 失效 | **alpha.11 已在本机隔离环境验证 Windows v0.114.0 的普通合作**；同一房间内仍须使用相同游戏版本 |
+| 游戏更新后旧 Mod 失效 | 同一 DLL 支持正式版 **v0.111.1** 与测试版 **v0.114.0**；同一房间内仍须使用相同游戏版本 |
 | 想要原版风格的联机入口 | **Steam 联机 / 局域网 · 直连**并列页签；LAN 页提供创建房间、加入房间、继续对局与联机设置 |
 | 旧存档客机角色不好接 | 独立**角色接管卡片页**：主机锁定、已占用禁选、金色选中与卡组/遗物摘要，确认前复查并由主机最终预留 |
 | 单人也要快速SL和多存档 | 单人普通冒险独立**快速SL**、**单人多存档**与按局删除；每日/自定义模式保持原版 |
@@ -77,7 +77,9 @@
 
 **alpha 开发版；Android 客机联机已支持并开放，跨网络整局与不同启动器版本仍以实际反馈为准。**
 
-- **0.8.0-alpha.11（当前）**：适配 v0.114.0，修复该版本下客机加入旧存档房间时角色接管页崩溃，共用解锁支持新进度格式；包含此前未单独发布的 v0.113.1 支持。本版在 Windows v0.114.0 本机隔离环境验证；v0.107.1 / v0.111.0 / v0.113.0 / v0.113.1 保留支持但本版未复测。不同游戏版本不能互联，旧版本存档需用原版本续局。Android 真机、跨网络与第三方模组组合未验收，Blitz 与 Dread 未验收。
+- **0.9.0-alpha.3（当前，试验版）**：安卓手机可做房主——建房、继续对局、快速 SL、失败读档重试；支持正式版 v0.111.1。真机仅验证过（alpha.2）经樱花隧道建房、电脑进房并开局进入战斗；**手机续局与快速 SL 未做任何运行测试**，本版只跑了核心逻辑检查与构建。手机热点直连目前可能连不上；手机房主不分发模组；切后台可能掉线。欢迎附启动器日志反馈。
+
+- **0.8.0-alpha.11**：适配 v0.114.0，修复该版本下客机加入旧存档房间时角色接管页崩溃，共用解锁支持新进度格式；包含此前未单独发布的 v0.113.1 支持。
 
 - **0.8.0-alpha.9**：适配 v0.113.0 的联机菜单、入房和结算；通过 Windows 四人开局、The Fool 快速 SL、失败重试和模组同步验证。v0.107.1 / v0.111.0 和 Android 真机未复测，Blitz 与 Dread 未验收。
 
@@ -92,7 +94,7 @@
 - 共用解锁默认关闭，只作用于当前账号同编号存档栏，关闭开关**不会撤销**已合并的进度；开启前请确保已备份。
 - alpha.8 的单 DLL 双版本记录：同一份 DLL 在 v0.107.1 与 v0.111.0 上加载，运行时探测接口差异；**两个版本之间不能互联**，命名存档记录来源游戏版本，不跨版本强载载荷。
 - **四个进程不等于四台设备。** 实体局域网、Radmin、樱花穿透与完整一局的跨设备、跨网络验收仍在进行；Android 客机联机已支持。
-- **现已支持 Android（Sts2MobileLauncher）客机联机**：手机可查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较、下载主机模组包后手动导入；手机端需同游戏版本与同 Mod 版本。手机建房、共用解锁与模组自动应用仍仅 Windows。
+- **现已支持 Android（Sts2MobileLauncher）客机联机**：手机可查看房间、认领角色并加入 Windows 房主，参与/申请全员快速 SL，并比较、下载主机模组包后手动导入；手机端需同游戏版本与同 Mod 版本。手机建房与续局为试验功能（见上方当前版本说明）；共用解锁与模组自动应用仍仅 Windows。
 - 不依赖 Steam 联机服务：正版 Steam、离线/非 Steam 构建与 Android 客机都可尝试；离线构建未逐版本验收，本 Mod 不含破解或绕过 DRM 内容。
 - 快速 SL 的效果参照手动保存退出再继续：未持久化的操作可以重做，但不保证所有选项重置，也不保证随机结果改变。
 - 手机模组导入包使用独立模组目录并按文件逐个核验；Windows 可整理/恢复工坊数字目录，整理前确认并备份。
@@ -110,7 +112,7 @@
 
 ## 从源码构建
 
-需要 .NET 9 SDK，以及**合法拥有**的游戏安装目录（本版发布产物使用 v0.114.0 引用构建）。
+需要 .NET 9 SDK，以及**合法拥有**的游戏安装目录（本版发布产物使用 v0.111.1 引用构建）。
 
 ```powershell
 dotnet build src/Sts2LanCoop.Mod/Sts2LanCoop.Mod.csproj -c Release -p:GameDir="C:\你的游戏目录"

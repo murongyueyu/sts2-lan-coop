@@ -83,7 +83,8 @@ internal static class ModSyncInventory
     {
         if(_startup!=null)await _startup;
         var mods=(await Read()).Where(m=>m.Loaded).ToList();
-        var profile=new SyncProfile{Game=GameBuild.Version,Session=AdmissionTransport.Session,Mods=mods};var required=ModSyncRules.Required(profile);
+        var profile=new SyncProfile{Game=GameBuild.Version,Session=AdmissionTransport.Session,Mods=mods,
+            Platform=LanCapability.Android?ModSyncRules.AndroidPlatform:ModSyncRules.WindowsPlatform};var required=ModSyncRules.Required(profile);
         foreach(var mod in mods.Where(m=>required.Contains(m.Id)&&m.Unavailable.Length>0))throw new IOException(mod.Name+"："+mod.Unavailable);
         var published=new List<SyncMod>();
         foreach(var inventoryMod in mods)
@@ -91,8 +92,9 @@ internal static class ModSyncInventory
             var mod=inventoryMod;
             if(required.Contains(mod.Id))
                 mod=mod with{Manifest=await Task.Run(()=>MobileModFiles.ReadHostManifest(mod))};
-            if(!required.Contains(mod.Id)||mod.Id==ModSyncRules.CoreId||!LanSession.Settings.ShareMods)
-            {published.Add(mod with{Unavailable=mod.Id==ModSyncRules.CoreId?"核心需手动统一版本":"主机未同意共享文件"});continue;}
+            if(!required.Contains(mod.Id)||mod.Id==ModSyncRules.CoreId||!LanSession.Settings.ShareMods||LanCapability.Android)
+            {published.Add(mod with{Unavailable=mod.Id==ModSyncRules.CoreId?"核心需手动统一版本":
+                LanCapability.Android?"手机房主不分发模组，请手动安装":"主机未同意共享文件"});continue;}
             try
             {
                 var units=ModSyncFiles.ReadManifests(mod.Directory);

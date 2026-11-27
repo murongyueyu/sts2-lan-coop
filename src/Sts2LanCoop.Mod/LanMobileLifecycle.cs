@@ -5,6 +5,23 @@ namespace Sts2LanCoop.Mod;
 internal partial class LanMobileLifecycle : Node
 {
     public static bool Foreground { get; private set; } = true;
+    private static bool _hosting;
+    private static bool _keptOn;
+    private static ulong _hostLeftAt;
+    // 手机主机进后台时主循环会停，客机可能超时：建房期间保持屏幕常亮，回前台后提示。
+    public static void HostingStarted()
+    {
+        if (!LanCapability.Android || _hosting) return;
+        _hosting = true; _hostLeftAt = 0;
+        _keptOn = DisplayServer.ScreenIsKeptOn();
+        DisplayServer.ScreenSetKeepOn(true);
+    }
+    public static void HostingEnded()
+    {
+        if (!_hosting) return;
+        _hosting = false; _hostLeftAt = 0;
+        DisplayServer.ScreenSetKeepOn(_keptOn);
+    }
     private bool _paused;
     private bool _focused = true;
     public override void _Notification(int what)
@@ -20,7 +37,19 @@ internal partial class LanMobileLifecycle : Node
     internal static void SetForeground(bool foreground)
     {
         Foreground = foreground;
-        if (!foreground) QuickReload.OnBackgrounded();
+        if (!foreground)
+        {
+            if (_hosting && _hostLeftAt == 0) _hostLeftAt = Time.GetTicksMsec();
+            QuickReload.OnBackgrounded();
+        }
+        else if (_hosting && _hostLeftAt != 0)
+        {
+            var away = (Time.GetTicksMsec() - _hostLeftAt) / 1000;
+            _hostLeftAt = 0;
+            GD.Print($"[STS2 LAN Co-op] 手机主机回到前台，离开约{away}秒。");
+            if (away >= 3) NativeUi.Notice(((SceneTree)Engine.GetMainLoop()).Root, "房主刚才离开了游戏",
+                $"离开约 {away} 秒。期间朋友可能已掉线，请确认人数；开房和对局时请让游戏保持在前台。");
+        }
     }
     internal static void ProbeSaveAccess()
     {

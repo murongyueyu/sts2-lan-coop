@@ -47,10 +47,25 @@ public sealed class SyncComparison
 public static class ModSyncRules
 {
     public const string CoreId = "sts2_lan_coop";
+    public const string WindowsPlatform = "Windows-x64";
+    public const string AndroidPlatform = "Android";
+    // 手机启动器会改写清单 JSON，因此手机房主只能按模组主 DLL/PCK 的逐文件摘要与版本核对。
+    public static bool SameContent(SyncProfile host, SyncMod target, SyncMod local)
+    {
+        if (host.Platform != AndroidPlatform)
+            return local.Fingerprint == target.Fingerprint && !string.IsNullOrEmpty(target.Fingerprint);
+        if (local.Unavailable.Length > 0) return false;
+        static SyncFile[] Binaries(SyncMod mod, string id) => mod.Files.Where(f => f.Name.Equals(id + ".dll", StringComparison.OrdinalIgnoreCase) ||
+            f.Name.Equals(id + ".pck", StringComparison.OrdinalIgnoreCase)).Select(f => f with { Name = f.Name.ToLowerInvariant() })
+            .OrderBy(f => f.Name, StringComparer.Ordinal).ToArray();
+        var expected = Binaries(target, target.Id);
+        // 没有可比对的二进制时不放行，避免只凭版本号认定一致。
+        return expected.Length > 0 && expected.SequenceEqual(Binaries(local, target.Id));
+    }
     public static readonly string[] ConflictingIds = ["QuickSL", "sts2_lan_connect", "LanSpire", "DirectConnectIP", "AutoModSubscriber"];
     public static HashSet<string> Required(SyncProfile host)
     {
-        if (host.Schema != 1 || !SupportedGameVersions.Contains(host.Game) || host.Platform != "Windows-x64" || host.Mods.Count > 1024 ||
+        if (host.Schema != 1 || !SupportedGameVersions.Contains(host.Game) || host.Platform != WindowsPlatform && host.Platform != AndroidPlatform || host.Mods.Count > 1024 ||
             host.Mods.Any(m => string.IsNullOrWhiteSpace(m.Id) || m.Id.Length>160) || host.Mods.Select(m=>m.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=host.Mods.Count)
             throw new InvalidDataException("主机模组清单格式、游戏或平台不受支持。");
         var required = host.Mods.Where(m=>m.Gameplay || m.Id==CoreId).Select(m=>m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -85,8 +100,8 @@ public static class ModSyncRules
             var target=host.Mods.Single(m=>m.Id.Equals(id,StringComparison.OrdinalIgnoreCase));
             var copies=local.Where(m=>m.Id.Equals(id,StringComparison.OrdinalIgnoreCase)).ToArray();
             var current=copies.FirstOrDefault(m=>m.Loaded) ?? copies.FirstOrDefault();
-            if(current?.Loaded==true && current.Version==target.Version && current.Fingerprint==target.Fingerprint && !string.IsNullOrEmpty(target.Fingerprint)) continue;
-            var matching=copies.FirstOrDefault(m=>m.Version==target.Version && m.Fingerprint==target.Fingerprint && !string.IsNullOrEmpty(target.Fingerprint));
+            if(current?.Loaded==true && current.Version==target.Version && SameContent(host,target,current)) continue;
+            var matching=copies.FirstOrDefault(m=>m.Version==target.Version && SameContent(host,target,m));
             var action=matching!=null ? "enable" : current==null ? "add" : "replace";
             var reason=current==null ? "本机未安装" : matching!=null ? "正确版本尚未加载" : current.Version!=target.Version ? $"{current.Version} → {target.Version}（按主机版本，可能包含降级）" : "版本相同但关键文件不同";
             if(id==CoreId) result.Errors.Add("LAN核心版本/文件不同，请先更新同版基础包，不能在同步中替换核心。");
